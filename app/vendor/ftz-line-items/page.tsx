@@ -12,17 +12,36 @@ export default function FtzLineItemsPage() {
     queryFn: () => api.get("/ftz_line_item").then((r) => r.data),
   });
 
+  const approved = data?.filter((r) => r.concurrence === true).length ?? 0;
+  const pending = data?.filter((r) => r.concurrence !== true).length ?? 0;
+  const totalValue = data?.reduce((s, r) => s + (r.line_value ?? 0), 0) ?? 0;
+
   return (
     <div>
-      <PageHeader title="FTZ Line Items" subtitle={data ? `${data.length} records` : undefined} />
+      <PageHeader title="FTZ Line Items" subtitle={data ? `${data.length} items` : undefined} />
+
+      {data && data.length > 0 && (
+        <div className="grid grid-cols-3 gap-3 mb-6">
+          <div className="bg-white border border-[#E2E8F0] rounded-lg px-4 py-3">
+            <p className="text-xs text-[#64748B] font-medium uppercase tracking-wider">Approved</p>
+            <p className="text-xl font-semibold text-emerald-600 mt-0.5 tabular-nums">{approved}</p>
+          </div>
+          <div className="bg-white border border-[#E2E8F0] rounded-lg px-4 py-3">
+            <p className="text-xs text-[#64748B] font-medium uppercase tracking-wider">Pending</p>
+            <p className="text-xl font-semibold text-amber-600 mt-0.5 tabular-nums">{pending}</p>
+          </div>
+          <div className="bg-white border border-[#E2E8F0] rounded-lg px-4 py-3">
+            <p className="text-xs text-[#64748B] font-medium uppercase tracking-wider">Total Line Value</p>
+            <p className="text-xl font-semibold text-[#020617] mt-0.5 tabular-nums">${totalValue.toLocaleString()}</p>
+          </div>
+        </div>
+      )}
 
       {isLoading && (
-        <div className="bg-white border border-[#E2E8F0] rounded-lg overflow-hidden">
+        <div className="bg-white border border-[#E2E8F0] rounded-lg">
           {[...Array(5)].map((_, i) => (
-            <div key={i} className="flex items-center gap-4 px-5 py-3.5 border-b border-[#F1F5F9]">
-              <Skeleton className="h-3.5 w-20" />
-              <Skeleton className="h-3.5 w-32" />
-              <Skeleton className="h-3.5 w-16 ml-auto" />
+            <div key={i} className="flex gap-4 px-5 py-3.5 border-b border-[#F1F5F9]">
+              <Skeleton className="h-3.5 w-20" /><Skeleton className="h-3.5 w-32" /><Skeleton className="h-3.5 w-16 ml-auto" />
             </div>
           ))}
         </div>
@@ -30,9 +49,7 @@ export default function FtzLineItemsPage() {
 
       {error && (
         <div className="flex items-center gap-2 px-4 py-3 rounded-lg bg-red-50 border border-red-100 text-sm text-red-600">
-          <svg className="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 3.75h.008v.008H12v-.008Z" />
-          </svg>
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 3.75h.008v.008H12v-.008Z" /></svg>
           Failed to load data.
         </div>
       )}
@@ -42,38 +59,41 @@ export default function FtzLineItemsPage() {
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-[#E2E8F0]">
-                  {["Batch ID", "Part #", "Description", "Qty", "Unit Value", "Status", "Account"].map((h) => (
-                    <th key={h} className="text-left px-5 py-3 text-xs font-semibold text-[#64748B] uppercase tracking-wider whitespace-nowrap">
-                      {h}
-                    </th>
+                <tr className="border-b border-[#E2E8F0] bg-[#F8FAFC]">
+                  {["Batch", "Part", "Origin", "Tariff", "Qty", "Unit Price", "Line Value", "Weight", "Zone", "Status"].map((h) => (
+                    <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-[#64748B] uppercase tracking-wider whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#F1F5F9]">
                 {data.length === 0 && (
-                  <tr>
-                    <td colSpan={7} className="px-5 py-12 text-center text-sm text-[#94A3B8]">No records found</td>
-                  </tr>
+                  <tr><td colSpan={10} className="px-5 py-12 text-center text-sm text-[#94A3B8]">No records found</td></tr>
                 )}
                 {data.map((row) => (
                   <tr key={row.id} className="hover:bg-[#F8FAFC] transition-fast">
-                    <td className="px-5 py-3.5 font-mono text-xs text-[#94A3B8]">{row.batch_reference_id.slice(0, 8)}…</td>
-                    <td className="px-5 py-3.5 font-semibold text-[#0F172A]">{row.part_number}</td>
-                    <td className="px-5 py-3.5 text-[#475569] max-w-[180px] truncate">{row.description ?? "—"}</td>
-                    <td className="px-5 py-3.5 text-[#334155] tabular-nums font-medium">{row.quantity}</td>
-                    <td className="px-5 py-3.5 text-[#334155] tabular-nums">{row.unit_value != null ? `$${row.unit_value}` : "—"}</td>
-                    <td className="px-5 py-3.5">
+                    <td className="px-4 py-3 font-mono text-xs text-[#94A3B8]">{row.batch_reference_id?.slice(0, 8) ?? "—"}…</td>
+                    <td className="px-4 py-3 font-semibold text-[#0F172A]">{row.part ?? "—"}</td>
+                    <td className="px-4 py-3 text-xs font-medium text-[#334155]">{row.country_origin ?? "—"}</td>
+                    <td className="px-4 py-3 font-mono text-xs text-[#64748B]">{row.tariff_number ?? "—"}</td>
+                    <td className="px-4 py-3 tabular-nums text-[#334155] font-medium">{row.piece_count ?? "—"}</td>
+                    <td className="px-4 py-3 tabular-nums text-[#334155]">{row.unit_price != null ? `$${row.unit_price}` : "—"}</td>
+                    <td className="px-4 py-3 tabular-nums text-[#334155] font-medium">{row.line_value != null ? `$${row.line_value.toLocaleString()}` : "—"}</td>
+                    <td className="px-4 py-3 tabular-nums text-[#64748B] text-xs">{row.weight_kg != null ? `${row.weight_kg} kg` : "—"}</td>
+                    <td className="px-4 py-3">
+                      {row.zone_status ? (
+                        <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
+                          row.zone_status === "P" ? "bg-blue-50 text-blue-700" : "bg-purple-50 text-purple-700"
+                        }`}>{row.zone_status === "P" ? "Privileged" : "Foreign"}</span>
+                      ) : "—"}
+                    </td>
+                    <td className="px-4 py-3">
                       <span className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full ${
-                        row.concurrence
-                          ? "bg-emerald-50 text-emerald-700"
-                          : "bg-amber-50 text-amber-700"
+                        row.concurrence ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"
                       }`}>
                         <span className={`w-1.5 h-1.5 rounded-full ${row.concurrence ? "bg-emerald-500" : "bg-amber-500"}`} />
                         {row.concurrence ? "Approved" : "Pending"}
                       </span>
                     </td>
-                    <td className="px-5 py-3.5 text-[#94A3B8] text-xs font-mono">{row.importer_account}</td>
                   </tr>
                 ))}
               </tbody>
