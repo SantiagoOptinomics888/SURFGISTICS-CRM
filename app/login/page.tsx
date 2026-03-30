@@ -109,7 +109,28 @@ export default function LoginPage() {
           </button>
         </form>
 
-        <p className="mt-6 text-center text-xs text-[#94A3B8]">
+        {/* Demo credentials */}
+        <div className="mt-6 rounded-md border border-[#E2E8F0] bg-white p-4">
+          <p className="text-xs font-semibold text-[#334155] mb-3">Demo credentials</p>
+          <div className="space-y-2">
+            {[
+              { label: "Vendor", email: "demo@surfgistics.com", password: "demo1234" },
+              { label: "Manager", email: "manager@surfgistics.com", password: "manager1234" },
+            ].map(({ label, email, password }) => (
+              <button
+                key={label}
+                type="button"
+                onClick={() => { setEmail(email); setPassword(password); }}
+                className="w-full flex items-center justify-between px-3 py-2 rounded border border-[#E2E8F0] hover:border-[#0369A1] hover:bg-[#F0F9FF] transition-fast cursor-pointer group"
+              >
+                <span className="text-xs font-medium text-[#334155] group-hover:text-[#0369A1]">{label}</span>
+                <span className="text-xs font-mono text-[#94A3B8]">{email}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <p className="mt-4 text-center text-xs text-[#94A3B8]">
           FTZ &amp; Customs Operations Platform
         </p>
       </div>
