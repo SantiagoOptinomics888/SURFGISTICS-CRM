@@ -1,4 +1,4 @@
-// These types exactly mirror the API schemas at https://api.optimation.io/docs
+// These types exactly mirror the API schemas at https://api.surfgistics.com/docs
 
 export interface ArtsPart {
   id: number;

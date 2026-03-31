@@ -1,6 +1,6 @@
 import axios from "axios";
 
-const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "https://api.optimation.io";
+const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "https://api.surfgistics.com";
 
 export const api = axios.create({
   baseURL: BASE_URL,

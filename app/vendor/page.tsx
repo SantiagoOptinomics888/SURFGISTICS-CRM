@@ -163,7 +163,7 @@ export default function VendorDashboard() {
                 <div className="w-2 h-2 rounded-full bg-emerald-500 mt-1.5 flex-shrink-0" />
                 <div>
                   <p className="text-xs font-semibold text-[#334155]">Endpoint</p>
-                  <p className="text-xs font-mono text-[#64748B] break-all">api.optimation.io</p>
+                  <p className="text-xs font-mono text-[#64748B] break-all">api.surfgistics.com</p>
                 </div>
               </div>
               <div className="border-t border-[#F1F5F9] pt-3">
