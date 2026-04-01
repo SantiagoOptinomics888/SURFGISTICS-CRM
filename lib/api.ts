@@ -20,9 +20,10 @@ api.interceptors.response.use(
   (res) => res,
   (error) => {
     if (error.response?.status === 401 && typeof window !== "undefined") {
+      const hadToken = !!localStorage.getItem("access_token");
       localStorage.removeItem("access_token");
       localStorage.removeItem("user");
-      window.location.href = "/login";
+      if (hadToken) window.location.href = "/login";
     }
     return Promise.reject(error);
   }
