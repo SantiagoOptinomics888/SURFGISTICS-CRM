@@ -4,6 +4,9 @@ import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { PageHeader } from "@/components/ui/page-header";
 import { Skeleton } from "@/components/ui/skeleton";
+import { DataToolbar } from "@/components/ui/data-toolbar";
+import { useDateFilter } from "@/lib/use-date-filter";
+import { exportToCsv } from "@/lib/export";
 import type { FtzLineItem } from "@/lib/types";
 
 export default function FtzLineItemsPage() {
@@ -12,15 +15,34 @@ export default function FtzLineItemsPage() {
     queryFn: () => api.get("/ftz_line_item").then((r) => r.data),
   });
 
-  const approved = data?.filter((r) => r.concurrence === true).length ?? 0;
-  const pending = data?.filter((r) => r.concurrence !== true).length ?? 0;
-  const totalValue = data?.reduce((s, r) => s + (r.line_value ?? 0), 0) ?? 0;
+  const { filtered, dateFrom, dateTo, setDateFrom, setDateTo } = useDateFilter(data);
+
+  const approved = filtered?.filter((r) => r.concurrence === true).length ?? 0;
+  const pending = filtered?.filter((r) => r.concurrence !== true).length ?? 0;
+  const totalValue = filtered?.reduce((s, r) => s + (r.line_value ?? 0), 0) ?? 0;
+
+  const handleExport = () => {
+    if (!filtered) return;
+    exportToCsv("ftz_line_items.csv", filtered, [
+      { key: "batch_reference_id", label: "Batch" },
+      { key: "part", label: "Part" },
+      { key: "country_origin", label: "Origin" },
+      { key: "tariff_number", label: "Tariff" },
+      { key: "piece_count", label: "Qty" },
+      { key: "unit_price", label: "Unit Price" },
+      { key: "line_value", label: "Line Value" },
+      { key: "weight_kg", label: "Weight (kg)" },
+      { key: "zone_status", label: "Zone" },
+      { key: "concurrence", label: "Status" },
+      { key: "created_at", label: "Date" },
+    ]);
+  };
 
   return (
     <div>
-      <PageHeader title="FTZ Line Items" subtitle={data ? `${data.length} items` : undefined} />
+      <PageHeader title="FTZ Line Items" subtitle={filtered ? `${filtered.length} items` : undefined} />
 
-      {data && data.length > 0 && (
+      {filtered && filtered.length > 0 && (
         <div className="grid grid-cols-3 gap-3 mb-6">
           <div className="bg-white border border-[#E2E8F0] rounded-lg px-4 py-3">
             <p className="text-xs text-[#64748B] font-medium uppercase tracking-wider">Approved</p>
@@ -36,6 +58,16 @@ export default function FtzLineItemsPage() {
           </div>
         </div>
       )}
+
+      {/* Toolbar */}
+      <DataToolbar
+        dateFrom={dateFrom}
+        dateTo={dateTo}
+        onDateFromChange={setDateFrom}
+        onDateToChange={setDateTo}
+        onExport={handleExport}
+        count={filtered?.length}
+      />
 
       {isLoading && (
         <div className="bg-white border border-[#E2E8F0] rounded-lg">
@@ -54,24 +86,24 @@ export default function FtzLineItemsPage() {
         </div>
       )}
 
-      {data && (
+      {filtered && (
         <div className="bg-white border border-[#E2E8F0] rounded-lg overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-[#E2E8F0] bg-[#F8FAFC]">
-                  {["Batch", "Part", "Origin", "Tariff", "Qty", "Unit Price", "Line Value", "Weight", "Zone", "Status"].map((h) => (
+                  {["Batch", "Part", "Origin", "Tariff", "Qty", "Unit Price", "Line Value", "Weight", "Zone", "Status", "Date"].map((h) => (
                     <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-[#64748B] uppercase tracking-wider whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#F1F5F9]">
-                {data.length === 0 && (
-                  <tr><td colSpan={10} className="px-5 py-12 text-center text-sm text-[#94A3B8]">No records found</td></tr>
+                {filtered.length === 0 && (
+                  <tr><td colSpan={11} className="px-5 py-12 text-center text-sm text-[#94A3B8]">No records found</td></tr>
                 )}
-                {data.map((row) => (
+                {filtered.map((row) => (
                   <tr key={row.id} className="hover:bg-[#F8FAFC] transition-fast">
-                    <td className="px-4 py-3 font-mono text-xs text-[#94A3B8]">{row.batch_reference_id?.slice(0, 8) ?? "—"}…</td>
+                    <td className="px-4 py-3 font-mono text-xs text-[#94A3B8]">{row.batch_reference_id?.slice(0, 8) ?? "—"}</td>
                     <td className="px-4 py-3 font-semibold text-[#0F172A]">{row.part ?? "—"}</td>
                     <td className="px-4 py-3 text-xs font-medium text-[#334155]">{row.country_origin ?? "—"}</td>
                     <td className="px-4 py-3 font-mono text-xs text-[#64748B]">{row.tariff_number ?? "—"}</td>
@@ -94,6 +126,7 @@ export default function FtzLineItemsPage() {
                         {row.concurrence ? "Approved" : "Pending"}
                       </span>
                     </td>
+                    <td className="px-4 py-3 text-[#94A3B8] text-xs">{new Date(row.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</td>
                   </tr>
                 ))}
               </tbody>

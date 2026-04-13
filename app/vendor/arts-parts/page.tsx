@@ -4,6 +4,9 @@ import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { PageHeader } from "@/components/ui/page-header";
 import { Skeleton } from "@/components/ui/skeleton";
+import { DataToolbar } from "@/components/ui/data-toolbar";
+import { useDateFilter } from "@/lib/use-date-filter";
+import { exportToCsv } from "@/lib/export";
 import type { ArtsPart } from "@/lib/types";
 
 const fmt = (n: number | null, prefix = "") =>
@@ -15,18 +18,37 @@ export default function ArtsPartsPage() {
     queryFn: () => api.get("/arts_part").then((r) => r.data),
   });
 
-  const totalValue = data?.reduce((s, r) => s + (r.value ?? 0), 0) ?? 0;
-  const exemptCount = data?.filter((r) => r.is_duty_exempt).length ?? 0;
+  const { filtered, dateFrom, dateTo, setDateFrom, setDateTo } = useDateFilter(data);
+
+  const totalValue = filtered?.reduce((s, r) => s + (r.value ?? 0), 0) ?? 0;
+  const exemptCount = filtered?.filter((r) => r.is_duty_exempt).length ?? 0;
+
+  const handleExport = () => {
+    if (!filtered) return;
+    exportToCsv("arts_parts.csv", filtered, [
+      { key: "part_number", label: "Part #" },
+      { key: "description", label: "Description" },
+      { key: "country", label: "Country" },
+      { key: "tariff_num", label: "Tariff" },
+      { key: "unit_price", label: "Unit Price" },
+      { key: "value", label: "Value" },
+      { key: "units_shipped", label: "Units" },
+      { key: "is_duty_exempt", label: "Duty Exempt" },
+      { key: "supplier_id", label: "Supplier" },
+      { key: "filer_code", label: "Filer" },
+      { key: "created_at", label: "Date" },
+    ]);
+  };
 
   return (
     <div>
-      <PageHeader title="Arts & Parts" subtitle={data ? `${data.length} parts · $${totalValue.toLocaleString()} total value` : undefined} />
+      <PageHeader title="Arts & Parts" subtitle={filtered ? `${filtered.length} parts · $${totalValue.toLocaleString()} total value` : undefined} />
 
       {/* Summary bar */}
-      {data && data.length > 0 && (
+      {filtered && filtered.length > 0 && (
         <div className="grid grid-cols-3 gap-3 mb-6">
           {[
-            { label: "Total Parts", value: data.length },
+            { label: "Total Parts", value: filtered.length },
             { label: "Duty Exempt", value: exemptCount },
             { label: "Total Value", value: `$${totalValue.toLocaleString()}` },
           ].map(({ label, value }) => (
@@ -37,6 +59,16 @@ export default function ArtsPartsPage() {
           ))}
         </div>
       )}
+
+      {/* Toolbar */}
+      <DataToolbar
+        dateFrom={dateFrom}
+        dateTo={dateTo}
+        onDateFromChange={setDateFrom}
+        onDateToChange={setDateTo}
+        onExport={handleExport}
+        count={filtered?.length}
+      />
 
       {isLoading && (
         <div className="bg-white border border-[#E2E8F0] rounded-lg overflow-hidden">
@@ -59,13 +91,13 @@ export default function ArtsPartsPage() {
         </div>
       )}
 
-      {data && (
+      {filtered && (
         <div className="bg-white border border-[#E2E8F0] rounded-lg overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-[#E2E8F0] bg-[#F8FAFC]">
-                  {["Part #", "Description", "Country", "Tariff", "Unit Price", "Value", "Units", "Duty", "Supplier", "Filer"].map((h) => (
+                  {["Part #", "Description", "Country", "Tariff", "Unit Price", "Value", "Units", "Duty", "Supplier", "Filer", "Date"].map((h) => (
                     <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-[#64748B] uppercase tracking-wider whitespace-nowrap">
                       {h}
                     </th>
@@ -73,12 +105,12 @@ export default function ArtsPartsPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#F1F5F9]">
-                {data.length === 0 && (
+                {filtered.length === 0 && (
                   <tr>
-                    <td colSpan={10} className="px-5 py-12 text-center text-sm text-[#94A3B8]">No records found</td>
+                    <td colSpan={11} className="px-5 py-12 text-center text-sm text-[#94A3B8]">No records found</td>
                   </tr>
                 )}
-                {data.map((row) => (
+                {filtered.map((row) => (
                   <tr key={row.id} className="hover:bg-[#F8FAFC] transition-fast">
                     <td className="px-4 py-3 font-semibold text-[#0F172A] whitespace-nowrap">{row.part_number ?? "—"}</td>
                     <td className="px-4 py-3 text-[#475569] max-w-[180px] truncate">{row.description ?? "—"}</td>
@@ -105,6 +137,7 @@ export default function ArtsPartsPage() {
                     </td>
                     <td className="px-4 py-3 text-[#475569] text-xs">{row.supplier_id ?? "—"}</td>
                     <td className="px-4 py-3 font-mono text-xs text-[#94A3B8]">{row.filer_code ?? "—"}</td>
+                    <td className="px-4 py-3 text-[#94A3B8] text-xs">{new Date(row.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</td>
                   </tr>
                 ))}
               </tbody>
@@ -118,8 +151,8 @@ export default function ArtsPartsPage() {
 
 function countryFlag(code: string): string {
   const flags: Record<string, string> = {
-    US: "🇺🇸", CN: "🇨🇳", JP: "🇯🇵", DE: "🇩🇪", MX: "🇲🇽",
-    KR: "🇰🇷", CA: "🇨🇦", GB: "🇬🇧", FR: "🇫🇷", BR: "🇧🇷",
+    US: "\u{1F1FA}\u{1F1F8}", CN: "\u{1F1E8}\u{1F1F3}", JP: "\u{1F1EF}\u{1F1F5}", DE: "\u{1F1E9}\u{1F1EA}", MX: "\u{1F1F2}\u{1F1FD}",
+    KR: "\u{1F1F0}\u{1F1F7}", CA: "\u{1F1E8}\u{1F1E6}", GB: "\u{1F1EC}\u{1F1E7}", FR: "\u{1F1EB}\u{1F1F7}", BR: "\u{1F1E7}\u{1F1F7}",
   };
   return flags[code] ?? code;
 }

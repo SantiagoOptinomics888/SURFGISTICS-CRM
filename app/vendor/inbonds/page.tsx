@@ -4,6 +4,9 @@ import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { PageHeader } from "@/components/ui/page-header";
 import { Skeleton } from "@/components/ui/skeleton";
+import { DataToolbar } from "@/components/ui/data-toolbar";
+import { useDateFilter } from "@/lib/use-date-filter";
+import { exportToCsv } from "@/lib/export";
 import type { Inbond } from "@/lib/types";
 
 export default function InbondsPage() {
@@ -12,14 +15,32 @@ export default function InbondsPage() {
     queryFn: () => api.get("/inbond").then((r) => r.data),
   });
 
-  const totalValue = data?.reduce((s, r) => s + (r.value ?? 0), 0) ?? 0;
-  const containers = new Set(data?.map((r) => r.container).filter(Boolean)).size;
+  const { filtered, dateFrom, dateTo, setDateFrom, setDateTo } = useDateFilter(data);
+
+  const totalValue = filtered?.reduce((s, r) => s + (r.value ?? 0), 0) ?? 0;
+  const containers = new Set(filtered?.map((r) => r.container).filter(Boolean)).size;
+
+  const handleExport = () => {
+    if (!filtered) return;
+    exportToCsv("inbonds.csv", filtered, [
+      { key: "container", label: "Container" },
+      { key: "marks_numbers", label: "Marks" },
+      { key: "part_number", label: "Part #" },
+      { key: "tariff_number", label: "Tariff" },
+      { key: "description", label: "Description" },
+      { key: "piece_count", label: "Qty" },
+      { key: "value", label: "Value" },
+      { key: "weight", label: "Weight" },
+      { key: "weight_uom", label: "Weight UOM" },
+      { key: "created_at", label: "Date" },
+    ]);
+  };
 
   return (
     <div>
-      <PageHeader title="In-Bond Records" subtitle={data ? `${data.length} records across ${containers} containers` : undefined} />
+      <PageHeader title="In-Bond Records" subtitle={filtered ? `${filtered.length} records across ${containers} containers` : undefined} />
 
-      {data && data.length > 0 && (
+      {filtered && filtered.length > 0 && (
         <div className="grid grid-cols-3 gap-3 mb-6">
           <div className="bg-white border border-[#E2E8F0] rounded-lg px-4 py-3">
             <p className="text-xs text-[#64748B] font-medium uppercase tracking-wider">Containers</p>
@@ -27,7 +48,7 @@ export default function InbondsPage() {
           </div>
           <div className="bg-white border border-[#E2E8F0] rounded-lg px-4 py-3">
             <p className="text-xs text-[#64748B] font-medium uppercase tracking-wider">Line Items</p>
-            <p className="text-xl font-semibold text-[#020617] mt-0.5 tabular-nums">{data.length}</p>
+            <p className="text-xl font-semibold text-[#020617] mt-0.5 tabular-nums">{filtered.length}</p>
           </div>
           <div className="bg-white border border-[#E2E8F0] rounded-lg px-4 py-3">
             <p className="text-xs text-[#64748B] font-medium uppercase tracking-wider">Total Value</p>
@@ -35,6 +56,16 @@ export default function InbondsPage() {
           </div>
         </div>
       )}
+
+      {/* Toolbar */}
+      <DataToolbar
+        dateFrom={dateFrom}
+        dateTo={dateTo}
+        onDateFromChange={setDateFrom}
+        onDateToChange={setDateTo}
+        onExport={handleExport}
+        count={filtered?.length}
+      />
 
       {isLoading && (
         <div className="bg-white border border-[#E2E8F0] rounded-lg">
@@ -53,7 +84,7 @@ export default function InbondsPage() {
         </div>
       )}
 
-      {data && (
+      {filtered && (
         <div className="bg-white border border-[#E2E8F0] rounded-lg overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -65,10 +96,10 @@ export default function InbondsPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#F1F5F9]">
-                {data.length === 0 && (
+                {filtered.length === 0 && (
                   <tr><td colSpan={9} className="px-5 py-12 text-center text-sm text-[#94A3B8]">No records found</td></tr>
                 )}
-                {data.map((row) => (
+                {filtered.map((row) => (
                   <tr key={row.id} className="hover:bg-[#F8FAFC] transition-fast">
                     <td className="px-4 py-3 font-mono text-xs font-semibold text-[#0F172A]">{row.container ?? "—"}</td>
                     <td className="px-4 py-3 font-mono text-xs text-[#64748B]">{row.marks_numbers ?? "—"}</td>
