@@ -15,7 +15,21 @@ export default function VendorsPage() {
 
   return (
     <div>
-      <PageHeader title="Vendors" subtitle={data ? `${data.length} vendors` : undefined} />
+      <PageHeader
+        title="Vendors"
+        subtitle={data ? `${data.length} vendors` : undefined}
+        action={
+          <Link
+            href="/manager/admin/users"
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-md bg-[#0369A1] hover:bg-[#0284C7] text-white text-sm font-semibold transition-colors cursor-pointer"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+            </svg>
+            Create User
+          </Link>
+        }
+      />
 
       {isLoading && (
         <div className="bg-white border border-[#E2E8F0] rounded-lg overflow-hidden">
