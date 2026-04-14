@@ -3,6 +3,7 @@ export interface AuthUser {
   role: "vendor" | "manager";
   importer_account: string | null;
   access_token: string;
+  permissions: string[];
 }
 
 export function saveAuth(data: AuthUser) {

@@ -24,17 +24,20 @@ export default function FtzLineItemsPage() {
   const handleExport = () => {
     if (!filtered) return;
     exportToCsv("ftz_line_items.csv", filtered, [
-      { key: "batch_reference_id", label: "Batch" },
+      { key: "country_origin", label: "Country_Origin" },
       { key: "part", label: "Part" },
-      { key: "country_origin", label: "Origin" },
-      { key: "tariff_number", label: "Tariff" },
-      { key: "piece_count", label: "Qty" },
-      { key: "unit_price", label: "Unit Price" },
-      { key: "line_value", label: "Line Value" },
-      { key: "weight_kg", label: "Weight (kg)" },
-      { key: "zone_status", label: "Zone" },
-      { key: "concurrence", label: "Status" },
-      { key: "created_at", label: "Date" },
+      { key: "piece_count", label: "Piece_Count" },
+      { key: "unit_price", label: "Unit_Price" },
+      { key: "line_value", label: "Line_Value" },
+      { key: "weight_kg", label: "Weight(KG)" },
+      { key: "hts_qty_1", label: "HTS_QTY_1" },
+      { key: "hts_qty_2", label: "HTS_QTY_2" },
+      { key: "line_charge", label: "Line_Charge" },
+      { key: "zone_status", label: "Zone_Status" },
+      { key: "lot_number", label: "Lot_Number" },
+      { key: "remarks", label: "Remarks" },
+      { key: "hbl", label: "Talian" },
+      { key: "concurrence", label: "Concurrence" },
     ]);
   };
 
@@ -92,18 +95,18 @@ export default function FtzLineItemsPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-[#E2E8F0] bg-[#F8FAFC]">
-                  {["Batch", "Part", "Origin", "Tariff", "Qty", "Unit Price", "Line Value", "Weight", "Zone", "Status", "Date"].map((h) => (
+                  {["Talian", "Part", "Origin", "Tariff", "Qty", "Unit Price", "Line Value", "Weight", "Zone", "Status"].map((h) => (
                     <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-[#64748B] uppercase tracking-wider whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#F1F5F9]">
                 {filtered.length === 0 && (
-                  <tr><td colSpan={11} className="px-5 py-12 text-center text-sm text-[#94A3B8]">No records found</td></tr>
+                  <tr><td colSpan={10} className="px-5 py-12 text-center text-sm text-[#94A3B8]">No records found</td></tr>
                 )}
                 {filtered.map((row) => (
                   <tr key={row.id} className="hover:bg-[#F8FAFC] transition-fast">
-                    <td className="px-4 py-3 font-mono text-xs text-[#94A3B8]">{row.batch_reference_id?.slice(0, 8) ?? "—"}</td>
+                    <td className="px-4 py-3 font-mono text-xs text-[#94A3B8]">{row.hbl ?? "—"}</td>
                     <td className="px-4 py-3 font-semibold text-[#0F172A]">{row.part ?? "—"}</td>
                     <td className="px-4 py-3 text-xs font-medium text-[#334155]">{row.country_origin ?? "—"}</td>
                     <td className="px-4 py-3 font-mono text-xs text-[#64748B]">{row.tariff_number ?? "—"}</td>
@@ -126,7 +129,6 @@ export default function FtzLineItemsPage() {
                         {row.concurrence ? "Approved" : "Pending"}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-[#94A3B8] text-xs">{new Date(row.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</td>
                   </tr>
                 ))}
               </tbody>

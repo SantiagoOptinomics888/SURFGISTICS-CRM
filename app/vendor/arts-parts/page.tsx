@@ -36,7 +36,6 @@ export default function ArtsPartsPage() {
       { key: "is_duty_exempt", label: "Duty Exempt" },
       { key: "supplier_id", label: "Supplier" },
       { key: "filer_code", label: "Filer" },
-      { key: "created_at", label: "Date" },
     ]);
   };
 
@@ -97,7 +96,7 @@ export default function ArtsPartsPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-[#E2E8F0] bg-[#F8FAFC]">
-                  {["Part #", "Description", "Country", "Tariff", "Unit Price", "Value", "Units", "Duty", "Supplier", "Filer", "Date"].map((h) => (
+                  {["Part #", "Description", "Country", "Tariff", "Unit Price", "Value", "Units", "Duty", "Supplier", "Filer"].map((h) => (
                     <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-[#64748B] uppercase tracking-wider whitespace-nowrap">
                       {h}
                     </th>
@@ -107,7 +106,7 @@ export default function ArtsPartsPage() {
               <tbody className="divide-y divide-[#F1F5F9]">
                 {filtered.length === 0 && (
                   <tr>
-                    <td colSpan={11} className="px-5 py-12 text-center text-sm text-[#94A3B8]">No records found</td>
+                    <td colSpan={10} className="px-5 py-12 text-center text-sm text-[#94A3B8]">No records found</td>
                   </tr>
                 )}
                 {filtered.map((row) => (
@@ -137,7 +136,6 @@ export default function ArtsPartsPage() {
                     </td>
                     <td className="px-4 py-3 text-[#475569] text-xs">{row.supplier_id ?? "—"}</td>
                     <td className="px-4 py-3 font-mono text-xs text-[#94A3B8]">{row.filer_code ?? "—"}</td>
-                    <td className="px-4 py-3 text-[#94A3B8] text-xs">{new Date(row.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</td>
                   </tr>
                 ))}
               </tbody>

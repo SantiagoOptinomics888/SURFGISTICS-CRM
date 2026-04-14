@@ -44,7 +44,14 @@ export default function ManagerDashboard() {
     <div>
       <div className="mb-7">
         <h1 className="text-xl font-semibold text-[#020617] tracking-tight">Overview</h1>
-        <p className="text-sm text-[#64748B] mt-0.5">Global operations summary</p>
+        <div className="flex items-center gap-3 mt-0.5">
+          <p className="text-sm text-[#64748B]">Global operations summary</p>
+          {data?.last_updated && (
+            <span className="text-xs text-[#94A3B8] border border-[#E2E8F0] rounded px-2 py-0.5">
+              Last updated {new Date(data.last_updated).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" })}
+            </span>
+          )}
+        </div>
       </div>
 
       {isLoading ? (

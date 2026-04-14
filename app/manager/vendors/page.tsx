@@ -45,9 +45,9 @@ export default function VendorsPage() {
         <div className="bg-white border border-[#E2E8F0] rounded-lg overflow-hidden">
           {/* Table header */}
           <div className="border-b border-[#E2E8F0] px-5 py-3 grid grid-cols-12 gap-4">
-            {["Vendor", "Account", "Status", "Arts", "FTZ", "In-Bond", "Tally", ""].map((h, i) => (
+            {["Vendor", "Account", "Status", "Arts", "FTZ", "In-Bond", "Tally", "Last Updated", ""].map((h, i) => (
               <div key={i} className={`text-xs font-semibold text-[#64748B] uppercase tracking-wider ${
-                i === 0 ? "col-span-3" : i === 7 ? "col-span-1 text-right" : "col-span-1"
+                i === 0 ? "col-span-2" : i === 1 ? "col-span-2" : i === 7 ? "col-span-2" : i === 8 ? "col-span-1 text-right" : "col-span-1"
               }`}>
                 {h}
               </div>
@@ -63,7 +63,7 @@ export default function VendorsPage() {
               return (
                 <div key={v.id} className="px-5 py-4 grid grid-cols-12 gap-4 items-center hover:bg-[#F8FAFC] transition-fast">
                   {/* Vendor */}
-                  <div className="col-span-3 flex items-center gap-3">
+                  <div className="col-span-2 flex items-center gap-3">
                     <div className="w-8 h-8 rounded-full bg-[#E0F2FE] flex items-center justify-center flex-shrink-0">
                       <span className="text-xs font-semibold text-[#0369A1]">{initials}</span>
                     </div>
@@ -85,6 +85,12 @@ export default function VendorsPage() {
                   <div className="col-span-1 text-sm text-[#334155] tabular-nums">{v.record_counts.ftz_line_items}</div>
                   <div className="col-span-1 text-sm text-[#334155] tabular-nums">{v.record_counts.inbonds}</div>
                   <div className="col-span-1 text-sm text-[#334155] tabular-nums">{v.record_counts.tally_outs}</div>
+                  {/* Last Updated */}
+                  <div className="col-span-2 text-xs text-[#94A3B8]">
+                    {v.last_updated
+                      ? new Date(v.last_updated).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+                      : "—"}
+                  </div>
                   {/* Action */}
                   <div className="col-span-1 text-right">
                     <Link

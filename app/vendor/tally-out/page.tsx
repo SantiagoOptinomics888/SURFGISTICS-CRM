@@ -24,14 +24,14 @@ export default function TallyOutPage() {
   const handleExport = () => {
     if (!filtered) return;
     exportToCsv("tally_outs.csv", filtered, [
-      { key: "delivery_order_no", label: "Delivery Order" },
+      { key: "delivery_order_no", label: "Delivery Order #" },
       { key: "item_code", label: "Item Code" },
-      { key: "quantity_ordered", label: "Qty" },
-      { key: "price_per_unit", label: "Unit Price" },
-      { key: "foreign_domestic_ind", label: "F/D" },
-      { key: "doc_code_3461_7512", label: "Doc Code" },
-      { key: "operator_id", label: "Operator" },
-      { key: "created_at", label: "Date" },
+      { key: "quantity_ordered", label: "Quantity Ordered" },
+      { key: "price_per_unit", label: "Price Per Unit" },
+      { key: "foreign_domestic_ind", label: "Foreign/Domestic Ind." },
+      { key: "doc_code_3461_7512", label: "3461-7512" },
+      { key: "operator_id", label: "Operator ID" },
+      { key: "internal_order_flag", label: "Internal Order" },
     ]);
   };
 
@@ -89,14 +89,14 @@ export default function TallyOutPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-[#E2E8F0] bg-[#F8FAFC]">
-                  {["Delivery Order", "Item Code", "Qty", "Unit Price", "Total", "F/D", "Doc Code", "Operator", "Date"].map((h) => (
+                  {["Delivery Order", "Item Code", "Qty", "Unit Price", "Total", "F/D", "Doc Code", "Operator"].map((h) => (
                     <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-[#64748B] uppercase tracking-wider whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#F1F5F9]">
                 {filtered.length === 0 && (
-                  <tr><td colSpan={9} className="px-5 py-12 text-center text-sm text-[#94A3B8]">No records found</td></tr>
+                  <tr><td colSpan={8} className="px-5 py-12 text-center text-sm text-[#94A3B8]">No records found</td></tr>
                 )}
                 {filtered.map((row) => (
                   <tr key={row.id} className="hover:bg-[#F8FAFC] transition-fast">
@@ -120,7 +120,6 @@ export default function TallyOutPage() {
                     </td>
                     <td className="px-4 py-3 font-mono text-xs text-[#64748B]">{row.doc_code_3461_7512 ?? "—"}</td>
                     <td className="px-4 py-3 text-xs text-[#475569]">{row.operator_id ?? "—"}</td>
-                    <td className="px-4 py-3 text-[#94A3B8] text-xs">{new Date(row.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</td>
                   </tr>
                 ))}
               </tbody>

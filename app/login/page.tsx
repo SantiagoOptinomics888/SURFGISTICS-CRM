@@ -23,7 +23,7 @@ export default function LoginPage() {
       const { data } = await api.post("/auth/token", form, {
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
       });
-      saveAuth({ email, role: data.role, importer_account: data.importer_account, access_token: data.access_token });
+      saveAuth({ email, role: data.role, importer_account: data.importer_account, access_token: data.access_token, permissions: data.permissions ?? [] });
       router.push(roleRedirect(data.role));
     } catch {
       setError("Invalid email or password.");

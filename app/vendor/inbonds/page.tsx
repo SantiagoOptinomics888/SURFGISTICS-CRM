@@ -32,7 +32,6 @@ export default function InbondsPage() {
       { key: "value", label: "Value" },
       { key: "weight", label: "Weight" },
       { key: "weight_uom", label: "Weight UOM" },
-      { key: "created_at", label: "Date" },
     ]);
   };
 
@@ -90,14 +89,14 @@ export default function InbondsPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-[#E2E8F0] bg-[#F8FAFC]">
-                  {["Container", "Marks", "Part #", "Tariff", "Description", "Qty", "Value", "Weight", "Date"].map((h) => (
+                  {["Container", "Marks", "Part #", "Tariff", "Description", "Qty", "Value", "Weight"].map((h) => (
                     <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-[#64748B] uppercase tracking-wider whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#F1F5F9]">
                 {filtered.length === 0 && (
-                  <tr><td colSpan={9} className="px-5 py-12 text-center text-sm text-[#94A3B8]">No records found</td></tr>
+                  <tr><td colSpan={8} className="px-5 py-12 text-center text-sm text-[#94A3B8]">No records found</td></tr>
                 )}
                 {filtered.map((row) => (
                   <tr key={row.id} className="hover:bg-[#F8FAFC] transition-fast">
@@ -109,7 +108,6 @@ export default function InbondsPage() {
                     <td className="px-4 py-3 tabular-nums text-[#334155] font-medium">{row.piece_count ?? "—"}</td>
                     <td className="px-4 py-3 tabular-nums text-[#334155]">{row.value != null ? `$${row.value.toLocaleString()}` : "—"}</td>
                     <td className="px-4 py-3 tabular-nums text-[#64748B] text-xs">{row.weight != null ? `${row.weight} ${row.weight_uom ?? ""}` : "—"}</td>
-                    <td className="px-4 py-3 text-[#94A3B8] text-xs">{new Date(row.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</td>
                   </tr>
                 ))}
               </tbody>

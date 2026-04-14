@@ -23,8 +23,6 @@ const TABS: { key: Tab; label: string }[] = [
 const fmt = (n: number | null | undefined, prefix = "") =>
   n != null ? `${prefix}${n.toLocaleString()}` : "—";
 
-const fmtDate = (d: string) =>
-  new Date(d).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 
 export default function VendorDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -149,21 +147,23 @@ export default function VendorDetailPage({ params }: { params: Promise<{ id: str
         { key: "units_shipped", label: "Units" },
         { key: "is_duty_exempt", label: "Duty Exempt" },
         { key: "supplier_id", label: "Supplier" },
-        { key: "created_at", label: "Date" },
       ]);
     } else if (activeTab === "ftz_line_items" && ftzFilter.filtered) {
       exportToCsv(`${account}_ftz_line_items.csv`, ftzFilter.filtered, [
-        { key: "batch_reference_id", label: "Batch" },
+        { key: "country_origin", label: "Country_Origin" },
         { key: "part", label: "Part" },
-        { key: "country_origin", label: "Origin" },
-        { key: "tariff_number", label: "Tariff" },
-        { key: "piece_count", label: "Qty" },
-        { key: "unit_price", label: "Unit Price" },
-        { key: "line_value", label: "Line Value" },
-        { key: "weight_kg", label: "Weight (kg)" },
-        { key: "zone_status", label: "Zone" },
-        { key: "concurrence", label: "Status" },
-        { key: "created_at", label: "Date" },
+        { key: "piece_count", label: "Piece_Count" },
+        { key: "unit_price", label: "Unit_Price" },
+        { key: "line_value", label: "Line_Value" },
+        { key: "weight_kg", label: "Weight(KG)" },
+        { key: "hts_qty_1", label: "HTS_QTY_1" },
+        { key: "hts_qty_2", label: "HTS_QTY_2" },
+        { key: "line_charge", label: "Line_Charge" },
+        { key: "zone_status", label: "Zone_Status" },
+        { key: "lot_number", label: "Lot_Number" },
+        { key: "remarks", label: "Remarks" },
+        { key: "hbl", label: "Talian" },
+        { key: "concurrence", label: "Concurrence" },
       ]);
     } else if (activeTab === "inbonds" && inbondFilter.filtered) {
       exportToCsv(`${account}_inbonds.csv`, inbondFilter.filtered, [
@@ -175,18 +175,17 @@ export default function VendorDetailPage({ params }: { params: Promise<{ id: str
         { key: "piece_count", label: "Qty" },
         { key: "value", label: "Value" },
         { key: "weight", label: "Weight" },
-        { key: "created_at", label: "Date" },
       ]);
     } else if (activeTab === "tally_outs" && tallyFilter.filtered) {
       exportToCsv(`${account}_tally_outs.csv`, tallyFilter.filtered, [
-        { key: "delivery_order_no", label: "Delivery Order" },
+        { key: "delivery_order_no", label: "Delivery Order #" },
         { key: "item_code", label: "Item Code" },
-        { key: "quantity_ordered", label: "Qty" },
-        { key: "price_per_unit", label: "Unit Price" },
-        { key: "foreign_domestic_ind", label: "F/D" },
-        { key: "doc_code_3461_7512", label: "Doc Code" },
-        { key: "operator_id", label: "Operator" },
-        { key: "created_at", label: "Date" },
+        { key: "quantity_ordered", label: "Quantity Ordered" },
+        { key: "price_per_unit", label: "Price Per Unit" },
+        { key: "foreign_domestic_ind", label: "Foreign/Domestic Ind." },
+        { key: "doc_code_3461_7512", label: "3461-7512" },
+        { key: "operator_id", label: "Operator ID" },
+        { key: "internal_order_flag", label: "Internal Order" },
       ]);
     }
   };
@@ -231,9 +230,16 @@ export default function VendorDetailPage({ params }: { params: Promise<{ id: str
               {data.is_active ? "Active" : "Inactive"}
             </span>
           </div>
-          <p className="text-sm text-[#64748B] mt-0.5">
-            Account: <span className="font-mono font-medium text-[#334155]">{data.importer_account ?? "—"}</span>
-          </p>
+          <div className="flex items-center gap-3 mt-0.5">
+            <p className="text-sm text-[#64748B]">
+              Account: <span className="font-mono font-medium text-[#334155]">{data.importer_account ?? "—"}</span>
+            </p>
+            {data.last_updated && (
+              <span className="text-xs text-[#94A3B8] border border-[#E2E8F0] rounded px-2 py-0.5">
+                Last updated {new Date(data.last_updated).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" })}
+              </span>
+            )}
+          </div>
         </div>
       </div>
 
@@ -294,14 +300,14 @@ export default function VendorDetailPage({ params }: { params: Promise<{ id: str
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-[#E2E8F0] bg-[#F8FAFC]">
-                  {["Part #", "Description", "Country", "Tariff", "Unit Price", "Value", "Units", "Duty", "Supplier", "Date"].map((h) => (
+                  {["Part #", "Description", "Country", "Tariff", "Unit Price", "Value", "Units", "Duty", "Supplier"].map((h) => (
                     <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-[#64748B] uppercase tracking-wider whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#F1F5F9]">
                 {artsFilter.filtered.length === 0 && (
-                  <tr><td colSpan={10} className="px-5 py-12 text-center text-sm text-[#94A3B8]">No records found</td></tr>
+                  <tr><td colSpan={9} className="px-5 py-12 text-center text-sm text-[#94A3B8]">No records found</td></tr>
                 )}
                 {artsFilter.filtered.map((row) => (
                   <tr key={row.id} className="hover:bg-[#F8FAFC] transition-fast">
@@ -320,7 +326,6 @@ export default function VendorDetailPage({ params }: { params: Promise<{ id: str
                       </span>
                     </td>
                     <td className="px-4 py-3 text-[#475569] text-xs">{row.supplier_id ?? "—"}</td>
-                    <td className="px-4 py-3 text-[#94A3B8] text-xs">{fmtDate(row.created_at)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -336,18 +341,18 @@ export default function VendorDetailPage({ params }: { params: Promise<{ id: str
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-[#E2E8F0] bg-[#F8FAFC]">
-                  {["Batch", "Part", "Origin", "Tariff", "Qty", "Unit Price", "Line Value", "Weight", "Zone", "Status", "Date"].map((h) => (
+                  {["Talian", "Part", "Origin", "Tariff", "Qty", "Unit Price", "Line Value", "Weight", "Zone", "Status"].map((h) => (
                     <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-[#64748B] uppercase tracking-wider whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#F1F5F9]">
                 {ftzFilter.filtered.length === 0 && (
-                  <tr><td colSpan={11} className="px-5 py-12 text-center text-sm text-[#94A3B8]">No records found</td></tr>
+                  <tr><td colSpan={10} className="px-5 py-12 text-center text-sm text-[#94A3B8]">No records found</td></tr>
                 )}
                 {ftzFilter.filtered.map((row) => (
                   <tr key={row.id} className="hover:bg-[#F8FAFC] transition-fast">
-                    <td className="px-4 py-3 font-mono text-xs text-[#94A3B8]">{row.batch_reference_id?.slice(0, 8) ?? "—"}</td>
+                    <td className="px-4 py-3 font-mono text-xs text-[#94A3B8]">{row.hbl ?? "—"}</td>
                     <td className="px-4 py-3 font-semibold text-[#0F172A]">{row.part ?? "—"}</td>
                     <td className="px-4 py-3 text-xs font-medium text-[#334155]">{row.country_origin ?? "—"}</td>
                     <td className="px-4 py-3 font-mono text-xs text-[#64748B]">{row.tariff_number ?? "—"}</td>
@@ -370,7 +375,6 @@ export default function VendorDetailPage({ params }: { params: Promise<{ id: str
                         {row.concurrence ? "Approved" : "Pending"}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-[#94A3B8] text-xs">{fmtDate(row.created_at)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -386,14 +390,14 @@ export default function VendorDetailPage({ params }: { params: Promise<{ id: str
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-[#E2E8F0] bg-[#F8FAFC]">
-                  {["Container", "Marks", "Part #", "Tariff", "Description", "Qty", "Value", "Weight", "Date"].map((h) => (
+                  {["Container", "Marks", "Part #", "Tariff", "Description", "Qty", "Value", "Weight"].map((h) => (
                     <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-[#64748B] uppercase tracking-wider whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#F1F5F9]">
                 {inbondFilter.filtered.length === 0 && (
-                  <tr><td colSpan={9} className="px-5 py-12 text-center text-sm text-[#94A3B8]">No records found</td></tr>
+                  <tr><td colSpan={8} className="px-5 py-12 text-center text-sm text-[#94A3B8]">No records found</td></tr>
                 )}
                 {inbondFilter.filtered.map((row) => (
                   <tr key={row.id} className="hover:bg-[#F8FAFC] transition-fast">
@@ -405,7 +409,6 @@ export default function VendorDetailPage({ params }: { params: Promise<{ id: str
                     <td className="px-4 py-3 tabular-nums text-[#334155] font-medium">{row.piece_count ?? "—"}</td>
                     <td className="px-4 py-3 tabular-nums text-[#334155]">{row.value != null ? `$${row.value.toLocaleString()}` : "—"}</td>
                     <td className="px-4 py-3 tabular-nums text-[#64748B] text-xs">{row.weight != null ? `${row.weight} ${row.weight_uom ?? ""}` : "—"}</td>
-                    <td className="px-4 py-3 text-[#94A3B8] text-xs">{fmtDate(row.created_at)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -421,14 +424,14 @@ export default function VendorDetailPage({ params }: { params: Promise<{ id: str
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-[#E2E8F0] bg-[#F8FAFC]">
-                  {["Delivery Order", "Item Code", "Qty", "Unit Price", "Total", "F/D", "Doc Code", "Operator", "Date"].map((h) => (
+                  {["Delivery Order", "Item Code", "Qty", "Unit Price", "Total", "F/D", "Doc Code", "Operator"].map((h) => (
                     <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-[#64748B] uppercase tracking-wider whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#F1F5F9]">
                 {tallyFilter.filtered.length === 0 && (
-                  <tr><td colSpan={9} className="px-5 py-12 text-center text-sm text-[#94A3B8]">No records found</td></tr>
+                  <tr><td colSpan={8} className="px-5 py-12 text-center text-sm text-[#94A3B8]">No records found</td></tr>
                 )}
                 {tallyFilter.filtered.map((row) => (
                   <tr key={row.id} className="hover:bg-[#F8FAFC] transition-fast">
@@ -452,7 +455,6 @@ export default function VendorDetailPage({ params }: { params: Promise<{ id: str
                     </td>
                     <td className="px-4 py-3 font-mono text-xs text-[#64748B]">{row.doc_code_3461_7512 ?? "—"}</td>
                     <td className="px-4 py-3 text-xs text-[#475569]">{row.operator_id ?? "—"}</td>
-                    <td className="px-4 py-3 text-[#94A3B8] text-xs">{fmtDate(row.created_at)}</td>
                   </tr>
                 ))}
               </tbody>

@@ -25,7 +25,7 @@ export interface ArtsPart {
 export interface FtzLineItem {
   id: number;
   created_at: string;
-  batch_reference_id: string | null;
+  hbl: string | null;
   concurrence: boolean | null;
   importer_account: string | null;
   country_origin: string | null;
@@ -90,6 +90,20 @@ export interface VendorDetail {
   is_active: boolean;
   role: string;
   record_counts: RecordCounts;
+  last_updated: string | null;
+}
+
+export const MODULE_PERMISSIONS = ["arts_part", "ftz", "inbond", "tally_out"] as const;
+export type ModulePermission = (typeof MODULE_PERMISSIONS)[number];
+
+export interface AdminUser {
+  id: number;
+  email: string;
+  role: string;
+  importer_account: string | null;
+  is_active: boolean;
+  permissions: string[];
+  created_at: string;
 }
 
 export interface ManagerStats {
@@ -98,4 +112,5 @@ export interface ManagerStats {
   total_ftz_line_items: number;
   total_inbonds: number;
   total_tally_outs: number;
+  last_updated: string | null;
 }

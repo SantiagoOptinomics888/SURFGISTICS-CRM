@@ -42,7 +42,7 @@ export default function VendorDashboard() {
   // Build unified activity feed — last 8 events across all resources sorted by created_at
   const activityFeed = [
     ...(arts ?? []).map((r) => ({ type: "arts_part" as const, id: r.id, label: r.part_number ?? "Part", sub: r.description ?? "", created_at: r.created_at })),
-    ...(ftz ?? []).map((r) => ({ type: "ftz" as const, id: r.id, label: r.part ?? "FTZ Item", sub: `Batch ${r.batch_reference_id?.slice(0, 8) ?? "—"}`, created_at: r.created_at })),
+    ...(ftz ?? []).map((r) => ({ type: "ftz" as const, id: r.id, label: r.part ?? "FTZ Item", sub: `Talian ${r.hbl ?? "—"}`, created_at: r.created_at })),
     ...(inbonds ?? []).map((r) => ({ type: "inbond" as const, id: r.id, label: r.container ?? "Container", sub: r.part_number ?? "", created_at: r.created_at })),
     ...(tally ?? []).map((r) => ({ type: "tally" as const, id: r.id, label: r.delivery_order_no ?? "DO", sub: r.item_code ?? "", created_at: r.created_at })),
   ]
