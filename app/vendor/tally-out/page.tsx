@@ -7,6 +7,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { DataToolbar } from "@/components/ui/data-toolbar";
 import { useDateFilter } from "@/lib/use-date-filter";
 import { exportToCsv } from "@/lib/export";
+import { CsvUpload } from "@/components/ui/csv-upload";
 import type { TallyOut } from "@/lib/types";
 
 export default function TallyOutPage() {
@@ -38,6 +39,8 @@ export default function TallyOutPage() {
   return (
     <div>
       <PageHeader title="Tally Out" subtitle={filtered ? `${filtered.length} items across ${orders} delivery orders` : undefined} />
+
+      <CsvUpload resourceType="tally_out" label="Tally Out" invalidateKeys={[["tally_outs"]]} />
 
       {filtered && filtered.length > 0 && (
         <div className="grid grid-cols-3 gap-3 mb-6">

@@ -7,6 +7,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { DataToolbar } from "@/components/ui/data-toolbar";
 import { useDateFilter } from "@/lib/use-date-filter";
 import { exportToCsv } from "@/lib/export";
+import { CsvUpload } from "@/components/ui/csv-upload";
 import type { FtzLineItem } from "@/lib/types";
 
 export default function FtzLineItemsPage() {
@@ -43,7 +44,9 @@ export default function FtzLineItemsPage() {
 
   return (
     <div>
-      <PageHeader title="FTZ Line Items" subtitle={filtered ? `${filtered.length} items` : undefined} />
+      <PageHeader title="Tally In" subtitle={filtered ? `${filtered.length} items` : undefined} />
+
+      <CsvUpload resourceType="ftz_line_item" label="Tally In" invalidateKeys={[["ftz_line_items"]]} />
 
       {filtered && filtered.length > 0 && (
         <div className="grid grid-cols-3 gap-3 mb-6">

@@ -50,8 +50,8 @@ export default function VendorDashboard() {
     .slice(0, 8);
 
   const typeConfig = {
-    arts_part: { label: "Arts & Parts", color: "bg-blue-50 text-blue-700", href: "/vendor/arts-parts" },
-    ftz:       { label: "FTZ",          color: "bg-purple-50 text-purple-700", href: "/vendor/ftz-line-items" },
+    arts_part: { label: "Parts", color: "bg-blue-50 text-blue-700", href: "/vendor/arts-parts" },
+    ftz:       { label: "Tally In",     color: "bg-purple-50 text-purple-700", href: "/vendor/ftz-line-items" },
     inbond:    { label: "In-Bond",      color: "bg-amber-50 text-amber-700", href: "/vendor/inbonds" },
     tally:     { label: "Tally Out",    color: "bg-emerald-50 text-emerald-700", href: "/vendor/tally-out" },
   };
@@ -92,8 +92,8 @@ export default function VendorDashboard() {
       ) : (
         <div className="grid grid-cols-2 gap-4 lg:grid-cols-4 mb-6">
           {[
-            { label: "Arts & Parts", value: arts?.length ?? 0, sub: `$${totalPartsValue.toLocaleString()} value`, href: "/vendor/arts-parts" },
-            { label: "FTZ Line Items", value: ftz?.length ?? 0, sub: `${ftzApproved} approved · ${ftzPending} pending`, href: "/vendor/ftz-line-items" },
+            { label: "Parts", value: arts?.length ?? 0, sub: `$${totalPartsValue.toLocaleString()} value`, href: "/vendor/arts-parts" },
+            { label: "Tally In", value: ftz?.length ?? 0, sub: `${ftzApproved} approved · ${ftzPending} pending`, href: "/vendor/ftz-line-items" },
             { label: "In-Bonds", value: inbonds?.length ?? 0, sub: `${new Set(inbonds?.map((r) => r.container).filter(Boolean)).size} containers`, href: "/vendor/inbonds" },
             { label: "Tally Out", value: tally?.length ?? 0, sub: `${new Set(tally?.map((r) => r.delivery_order_no).filter(Boolean)).size} delivery orders`, href: "/vendor/tally-out" },
           ].map(({ label, value, sub, href }) => (

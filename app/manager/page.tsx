@@ -66,8 +66,8 @@ export default function ManagerDashboard() {
       ) : (
         <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
           <StatCard label="Vendors" value={data?.total_vendors ?? 0} icon={icons.vendors} />
-          <StatCard label="Arts & Parts" value={data?.total_arts_parts ?? 0} icon={icons.parts} />
-          <StatCard label="FTZ Items" value={data?.total_ftz_line_items ?? 0} icon={icons.ftz} />
+          <StatCard label="Parts" value={data?.total_arts_parts ?? 0} icon={icons.parts} />
+          <StatCard label="Tally In" value={data?.total_ftz_line_items ?? 0} icon={icons.ftz} />
           <StatCard label="In-Bonds" value={data?.total_inbonds ?? 0} icon={icons.inbond} />
           <StatCard label="Tally Outs" value={data?.total_tally_outs ?? 0} icon={icons.tally} />
         </div>

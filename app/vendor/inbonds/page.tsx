@@ -7,6 +7,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { DataToolbar } from "@/components/ui/data-toolbar";
 import { useDateFilter } from "@/lib/use-date-filter";
 import { exportToCsv } from "@/lib/export";
+import { CsvUpload } from "@/components/ui/csv-upload";
 import type { Inbond } from "@/lib/types";
 
 export default function InbondsPage() {
@@ -38,6 +39,8 @@ export default function InbondsPage() {
   return (
     <div>
       <PageHeader title="In-Bond Records" subtitle={filtered ? `${filtered.length} records across ${containers} containers` : undefined} />
+
+      <CsvUpload resourceType="inbond" label="In-Bond" invalidateKeys={[["inbonds"]]} />
 
       {filtered && filtered.length > 0 && (
         <div className="grid grid-cols-3 gap-3 mb-6">

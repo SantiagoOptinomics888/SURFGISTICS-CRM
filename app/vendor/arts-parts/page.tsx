@@ -7,6 +7,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { DataToolbar } from "@/components/ui/data-toolbar";
 import { useDateFilter } from "@/lib/use-date-filter";
 import { exportToCsv } from "@/lib/export";
+import { CsvUpload } from "@/components/ui/csv-upload";
 import type { ArtsPart } from "@/lib/types";
 
 const fmt = (n: number | null, prefix = "") =>
@@ -41,7 +42,9 @@ export default function ArtsPartsPage() {
 
   return (
     <div>
-      <PageHeader title="Arts & Parts" subtitle={filtered ? `${filtered.length} parts · $${totalValue.toLocaleString()} total value` : undefined} />
+      <PageHeader title="Parts" subtitle={filtered ? `${filtered.length} parts · $${totalValue.toLocaleString()} total value` : undefined} />
+
+      <CsvUpload resourceType="arts_part" label="Parts" invalidateKeys={[["arts_parts"]]} />
 
       {/* Summary bar */}
       {filtered && filtered.length > 0 && (

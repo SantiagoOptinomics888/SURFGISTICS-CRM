@@ -1,12 +1,13 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { use, useState } from "react";
+import { use, useMemo, useState } from "react";
 import Link from "next/link";
 import { api } from "@/lib/api";
 import { Skeleton } from "@/components/ui/skeleton";
 import { StatCard } from "@/components/ui/stat-card";
 import { DataToolbar } from "@/components/ui/data-toolbar";
+import { AcelynkModal } from "@/components/ui/acelynk-modal";
 import { useDateFilter } from "@/lib/use-date-filter";
 import { exportToCsv } from "@/lib/export";
 import type { VendorDetail, ArtsPart, FtzLineItem, Inbond, TallyOut } from "@/lib/types";
@@ -14,8 +15,8 @@ import type { VendorDetail, ArtsPart, FtzLineItem, Inbond, TallyOut } from "@/li
 type Tab = "arts_parts" | "ftz_line_items" | "inbonds" | "tally_outs";
 
 const TABS: { key: Tab; label: string }[] = [
-  { key: "arts_parts", label: "Arts & Parts" },
-  { key: "ftz_line_items", label: "FTZ Line Items" },
+  { key: "arts_parts", label: "Parts" },
+  { key: "ftz_line_items", label: "Tally In" },
   { key: "inbonds", label: "In-Bonds" },
   { key: "tally_outs", label: "Tally Outs" },
 ];
@@ -27,6 +28,7 @@ const fmt = (n: number | null | undefined, prefix = "") =>
 export default function VendorDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const [activeTab, setActiveTab] = useState<Tab>("arts_parts");
+  const [acelynkOpen, setAcelynkOpen] = useState(false);
 
   const { data, isLoading, error } = useQuery<VendorDetail>({
     queryKey: ["vendor", id],
@@ -93,7 +95,7 @@ export default function VendorDetailPage({ params }: { params: Promise<{ id: str
 
   const counts = [
     {
-      label: "Arts & Parts",
+      label: "Parts",
       value: data.record_counts.arts_parts,
       tab: "arts_parts" as Tab,
       icon: (
@@ -103,7 +105,7 @@ export default function VendorDetailPage({ params }: { params: Promise<{ id: str
       ),
     },
     {
-      label: "FTZ Line Items",
+      label: "Tally In",
       value: data.record_counts.ftz_line_items,
       tab: "ftz_line_items" as Tab,
       icon: (
@@ -201,6 +203,12 @@ export default function VendorDetailPage({ params }: { params: Promise<{ id: str
     : activeTab === "ftz_line_items" ? ftzItems.isLoading
     : activeTab === "inbonds" ? inbonds.isLoading
     : tallyOuts.isLoading;
+
+  const ftzHbls = useMemo(() => {
+    if (!ftzFilter.filtered) return [];
+    const unique = new Set(ftzFilter.filtered.map((r) => r.hbl).filter(Boolean) as string[]);
+    return Array.from(unique);
+  }, [ftzFilter.filtered]);
 
   return (
     <div>
@@ -334,6 +342,21 @@ export default function VendorDetailPage({ params }: { params: Promise<{ id: str
         </div>
       )}
 
+      {/* Send to ACELynk button (FTZ tab only) */}
+      {activeTab === "ftz_line_items" && ftzHbls.length > 0 && (
+        <div className="flex justify-end mb-3">
+          <button
+            onClick={() => setAcelynkOpen(true)}
+            className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg bg-[#0369A1] text-white hover:bg-[#075985] transition-colors cursor-pointer"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 12 3.269 3.125A59.769 59.769 0 0 1 21.485 12 59.768 59.768 0 0 1 3.27 20.875L5.999 12Zm0 0h7.5" />
+            </svg>
+            Send to ACELynk ({ftzHbls.length} HBL{ftzHbls.length !== 1 ? "s" : ""})
+          </button>
+        </div>
+      )}
+
       {/* FTZ Line Items table */}
       {activeTab === "ftz_line_items" && ftzFilter.filtered && (
         <div className="bg-white border border-[#E2E8F0] rounded-lg overflow-hidden">
@@ -462,6 +485,14 @@ export default function VendorDetailPage({ params }: { params: Promise<{ id: str
           </div>
         </div>
       )}
+
+      {/* ACELynk Modal */}
+      <AcelynkModal
+        open={acelynkOpen}
+        onClose={() => setAcelynkOpen(false)}
+        hbls={ftzHbls}
+        importerAccount={data.importer_account ?? ""}
+      />
     </div>
   );
 }

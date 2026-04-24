@@ -114,3 +114,10 @@ export interface ManagerStats {
   total_tally_outs: number;
   last_updated: string | null;
 }
+
+export interface NewItemsResponse {
+  arts_parts: ArtsPart[];
+  ftz_line_items: FtzLineItem[];
+  inbonds: Inbond[];
+  tally_outs: TallyOut[];
+}
