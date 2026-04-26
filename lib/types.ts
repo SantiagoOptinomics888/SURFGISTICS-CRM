@@ -112,7 +112,17 @@ export interface ManagerStats {
   total_ftz_line_items: number;
   total_inbonds: number;
   total_tally_outs: number;
+  total_records: number;
+  pending_concurrences: number;
   last_updated: string | null;
+}
+
+export interface RecentActivityItem {
+  type: string;
+  description: string;
+  vendor_email: string | null;
+  importer_account: string | null;
+  created_at: string;
 }
 
 export interface NewItemsResponse {

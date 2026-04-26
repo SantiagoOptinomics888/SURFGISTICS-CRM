@@ -5,7 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { PageHeader } from "@/components/ui/page-header";
 import { Skeleton } from "@/components/ui/skeleton";
-import { exportToCsv } from "@/lib/export";
+import { exportToCsv, exportPartsForAcelynk } from "@/lib/export";
 import type { NewItemsResponse, ArtsPart, FtzLineItem, Inbond, TallyOut } from "@/lib/types";
 
 type DataType = "arts_parts" | "ftz_line_items" | "inbonds" | "tally_outs";
@@ -65,22 +65,7 @@ export default function NewItemsPage() {
   function handleExport() {
     if (!data) return;
     if (activeTab === "arts_parts") {
-      exportToCsv("new_parts.csv", data.arts_parts, [
-        { key: "importer_account", label: "Account" },
-        { key: "part_number", label: "Part #" },
-        { key: "description", label: "Description" },
-        { key: "country", label: "Country" },
-        { key: "tariff_num", label: "Tariff" },
-        { key: "unit_price", label: "Unit Price" },
-        { key: "value", label: "Value" },
-        { key: "units_shipped", label: "Units" },
-        { key: "is_duty_exempt", label: "Duty Exempt" },
-        { key: "manufacturer", label: "Manufacturer" },
-        { key: "supplier_id", label: "Supplier" },
-        { key: "filer_code", label: "Filer" },
-        { key: "warehouse", label: "Warehouse" },
-        { key: "created_at", label: "Created" },
-      ]);
+      exportPartsForAcelynk("new_parts.csv", data.arts_parts as unknown as Record<string, unknown>[]);
     } else if (activeTab === "ftz_line_items") {
       exportToCsv("new_tally_in.csv", data.ftz_line_items, [
         { key: "importer_account", label: "Account" },
@@ -259,43 +244,93 @@ export default function NewItemsPage() {
 }
 
 function PartsTable({ rows }: { rows: ArtsPart[] }) {
+  const [showMissingTariff, setShowMissingTariff] = useState(false);
+  const missingCount = rows.filter((r) => !r.tariff_num).length;
+  const displayed = showMissingTariff ? rows.filter((r) => !r.tariff_num) : rows;
+
   return (
-    <div className="bg-white border border-[#E2E8F0] rounded-lg overflow-hidden">
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-[#E2E8F0] bg-[#F8FAFC]">
-              {["Account", "Part #", "Description", "Country", "Tariff", "Unit Price", "Value", "Units", "Duty", "Created"].map((h) => (
-                <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-[#64748B] uppercase tracking-wider whitespace-nowrap">{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-[#F1F5F9]">
-            {rows.length === 0 && (
-              <tr><td colSpan={10} className="px-5 py-12 text-center text-sm text-[#94A3B8]">No new parts in this period</td></tr>
-            )}
-            {rows.map((row) => (
-              <tr key={row.id} className="hover:bg-[#F8FAFC] transition-colors">
-                <td className="px-4 py-3 font-mono text-xs font-semibold text-[#0369A1]">{row.importer_account ?? "—"}</td>
-                <td className="px-4 py-3 font-semibold text-[#0F172A] whitespace-nowrap">{row.part_number ?? "—"}</td>
-                <td className="px-4 py-3 text-[#475569] max-w-[160px] truncate">{row.description ?? "—"}</td>
-                <td className="px-4 py-3 text-xs font-medium text-[#334155]">{row.country ?? "—"}</td>
-                <td className="px-4 py-3 font-mono text-xs text-[#64748B]">{row.tariff_num ?? "—"}</td>
-                <td className="px-4 py-3 tabular-nums text-[#334155]">{row.unit_price != null ? `$${row.unit_price}` : "—"}</td>
-                <td className="px-4 py-3 tabular-nums text-[#334155] font-medium">{row.value != null ? `$${row.value.toLocaleString()}` : "—"}</td>
-                <td className="px-4 py-3 tabular-nums text-[#334155]">{row.units_shipped ?? "—"}</td>
-                <td className="px-4 py-3">
-                  <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
-                    row.is_duty_exempt ? "bg-emerald-50 text-emerald-700" : "bg-[#F1F5F9] text-[#64748B]"
-                  }`}>{row.is_duty_exempt === null ? "—" : row.is_duty_exempt ? "Exempt" : "Taxable"}</span>
-                </td>
-                <td className="px-4 py-3 text-xs text-[#94A3B8] whitespace-nowrap">
-                  {new Date(row.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
-                </td>
+    <div>
+      {/* Missing tariff alert */}
+      {missingCount > 0 && (
+        <button
+          onClick={() => setShowMissingTariff((v) => !v)}
+          className={`mb-3 w-full flex items-center justify-between px-4 py-3 rounded-lg border text-sm transition-colors cursor-pointer ${
+            showMissingTariff
+              ? "bg-amber-50 border-amber-300 text-amber-800"
+              : "bg-amber-50/60 border-amber-200 text-amber-700 hover:border-amber-300"
+          }`}
+        >
+          <div className="flex items-center gap-2">
+            <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" />
+            </svg>
+            <span>
+              <span className="font-semibold">{missingCount} part{missingCount !== 1 ? "s" : ""}</span> missing Tariff # — vendor follow-up needed
+            </span>
+          </div>
+          <span className="text-xs font-medium underline underline-offset-2">
+            {showMissingTariff ? "Show all" : "Show flagged"}
+          </span>
+        </button>
+      )}
+
+      <div className="bg-white border border-[#E2E8F0] rounded-lg overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-[#E2E8F0] bg-[#F8FAFC]">
+                {["", "Account", "Part #", "Description", "Country", "Tariff", "Unit Price", "Value", "Units", "Duty", "Created"].map((h) => (
+                  <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-[#64748B] uppercase tracking-wider whitespace-nowrap">{h}</th>
+                ))}
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody className="divide-y divide-[#F1F5F9]">
+              {displayed.length === 0 && (
+                <tr><td colSpan={11} className="px-5 py-12 text-center text-sm text-[#94A3B8]">
+                  {showMissingTariff ? "All parts have a Tariff #" : "No new parts in this period"}
+                </td></tr>
+              )}
+              {displayed.map((row) => {
+                const missingTariff = !row.tariff_num;
+                return (
+                  <tr key={row.id} className={`transition-colors ${missingTariff ? "bg-amber-50/40 hover:bg-amber-50" : "hover:bg-[#F8FAFC]"}`}>
+                    <td className="px-4 py-3 w-5">
+                      {missingTariff && (
+                        <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-amber-100" title="Missing Tariff #">
+                          <svg className="w-3.5 h-3.5 text-amber-600" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m0 3.75h.008v.008H12v-.008ZM21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+                          </svg>
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 font-mono text-xs font-semibold text-[#0369A1]">{row.importer_account ?? "—"}</td>
+                    <td className="px-4 py-3 font-semibold text-[#0F172A] whitespace-nowrap">{row.part_number ?? "—"}</td>
+                    <td className="px-4 py-3 text-[#475569] max-w-[160px] truncate">{row.description ?? "—"}</td>
+                    <td className="px-4 py-3 text-xs font-medium text-[#334155]">{row.country ?? "—"}</td>
+                    <td className="px-4 py-3 font-mono text-xs">
+                      {row.tariff_num ? (
+                        <span className="text-[#64748B]">{row.tariff_num}</span>
+                      ) : (
+                        <span className="text-amber-600 font-semibold">MISSING</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 tabular-nums text-[#334155]">{row.unit_price != null ? `$${row.unit_price}` : "—"}</td>
+                    <td className="px-4 py-3 tabular-nums text-[#334155] font-medium">{row.value != null ? `$${row.value.toLocaleString()}` : "—"}</td>
+                    <td className="px-4 py-3 tabular-nums text-[#334155]">{row.units_shipped ?? "—"}</td>
+                    <td className="px-4 py-3">
+                      <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
+                        row.is_duty_exempt ? "bg-emerald-50 text-emerald-700" : "bg-[#F1F5F9] text-[#64748B]"
+                      }`}>{row.is_duty_exempt === null ? "—" : row.is_duty_exempt ? "Exempt" : "Taxable"}</span>
+                    </td>
+                    <td className="px-4 py-3 text-xs text-[#94A3B8] whitespace-nowrap">
+                      {new Date(row.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );
