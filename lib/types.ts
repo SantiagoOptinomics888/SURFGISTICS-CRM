@@ -125,6 +125,15 @@ export interface RecentActivityItem {
   created_at: string;
 }
 
+export interface HblGroup {
+  hbl: string;
+  line_count: number;
+  total_pieces: number;
+  total_value: number;
+  pending_count: number;
+  line_items: FtzLineItem[];
+}
+
 export interface NewItemsResponse {
   arts_parts: ArtsPart[];
   ftz_line_items: FtzLineItem[];
