@@ -5,7 +5,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 
 const TEMPLATE_HEADERS: Record<string, string[]> = {
-  arts_part: ["part_number", "description", "country", "unit_price", "tariff_num", "manufacturer", "warehouse", "value", "units_shipped", "is_duty_exempt", "filer_code", "supplier_id"],
+  arts_part: ["ImporterAccount", "PartNumber", "Description", "Country", "Tariff #", "CountryOfOrigin"],
   ftz_line_item: ["Country_Origin", "Part", "Piece_Count", "Unit_Price", "Line_Value", "Weight_KG", "HTS_QTY_1", "HTS_QTY_2", "Line_Charge", "Reference_Qualifier", "Reference_ID", "Zone_Status", "SPI", "SPI_Country", "SPI_Secondary", "Lot_Number", "Remarks"],
   inbond: ["container", "part_number", "tariff_number", "description", "piece_count", "value", "weight", "weight_uom", "marks_numbers", "manifest_uom"],
   tally_out: ["Delivery Order #", "Item Code", "Quantity Ordered", "Price Per Unit", "Foreign/Domestic Ind.", "3461-7512", "Operator ID", "Internal Order"],
