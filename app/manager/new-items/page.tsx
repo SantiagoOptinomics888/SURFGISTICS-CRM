@@ -337,54 +337,130 @@ function PartsTable({ rows }: { rows: ArtsPart[] }) {
 }
 
 function TallyInTable({ rows }: { rows: FtzLineItem[] }) {
-  return (
-    <div className="bg-white border border-[#E2E8F0] rounded-lg overflow-hidden">
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-[#E2E8F0] bg-[#F8FAFC]">
-              {["Account", "Talian", "Part", "Origin", "Qty", "Unit Price", "Line Value", "Weight", "Zone", "Status", "Created"].map((h) => (
-                <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-[#64748B] uppercase tracking-wider whitespace-nowrap">{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-[#F1F5F9]">
-            {rows.length === 0 && (
-              <tr><td colSpan={11} className="px-5 py-12 text-center text-sm text-[#94A3B8]">No new tally in items in this period</td></tr>
-            )}
-            {rows.map((row) => (
-              <tr key={row.id} className="hover:bg-[#F8FAFC] transition-colors">
-                <td className="px-4 py-3 font-mono text-xs font-semibold text-[#0369A1]">{row.importer_account ?? "—"}</td>
-                <td className="px-4 py-3 font-mono text-xs text-[#94A3B8]">{row.hbl ?? "—"}</td>
-                <td className="px-4 py-3 font-semibold text-[#0F172A]">{row.part ?? "—"}</td>
-                <td className="px-4 py-3 text-xs text-[#334155]">{row.country_origin ?? "—"}</td>
-                <td className="px-4 py-3 tabular-nums text-[#334155] font-medium">{row.piece_count ?? "—"}</td>
-                <td className="px-4 py-3 tabular-nums text-[#334155]">{row.unit_price != null ? `$${row.unit_price}` : "—"}</td>
-                <td className="px-4 py-3 tabular-nums text-[#334155] font-medium">{row.line_value != null ? `$${row.line_value.toLocaleString()}` : "—"}</td>
-                <td className="px-4 py-3 tabular-nums text-[#64748B] text-xs">{row.weight_kg != null ? `${row.weight_kg} kg` : "—"}</td>
-                <td className="px-4 py-3">
-                  {row.zone_status ? (
-                    <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
-                      row.zone_status === "P" ? "bg-blue-50 text-blue-700" : "bg-purple-50 text-purple-700"
-                    }`}>{row.zone_status === "P" ? "Privileged" : "Foreign"}</span>
-                  ) : "—"}
-                </td>
-                <td className="px-4 py-3">
-                  <span className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full ${
-                    row.concurrence ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"
-                  }`}>
-                    <span className={`w-1.5 h-1.5 rounded-full ${row.concurrence ? "bg-emerald-500" : "bg-amber-500"}`} />
-                    {row.concurrence ? "Approved" : "Pending"}
-                  </span>
-                </td>
-                <td className="px-4 py-3 text-xs text-[#94A3B8] whitespace-nowrap">
-                  {new Date(row.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+
+  // Group rows by HBL
+  const grouped = rows.reduce<Record<string, FtzLineItem[]>>((acc, row) => {
+    const key = row.hbl || "(No HBL)";
+    if (!acc[key]) acc[key] = [];
+    acc[key].push(row);
+    return acc;
+  }, {});
+
+  const hblKeys = Object.keys(grouped).sort();
+
+  function toggleHbl(hbl: string) {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(hbl)) next.delete(hbl);
+      else next.add(hbl);
+      return next;
+    });
+  }
+
+  if (rows.length === 0) {
+    return (
+      <div className="bg-white border border-[#E2E8F0] rounded-lg px-5 py-12 text-center text-sm text-[#94A3B8]">
+        No new tally in items in this period
       </div>
+    );
+  }
+
+  return (
+    <div className="space-y-2">
+      {hblKeys.map((hbl) => {
+        const items = grouped[hbl];
+        const isOpen = expanded.has(hbl);
+        const totalValue = items.reduce((s, r) => s + (r.line_value ?? 0), 0);
+        const totalPieces = items.reduce((s, r) => s + (r.piece_count ?? 0), 0);
+        const pendingCount = items.filter((r) => !r.concurrence).length;
+        const account = items[0]?.importer_account ?? "—";
+
+        return (
+          <div key={hbl} className="bg-white border border-[#E2E8F0] rounded-lg overflow-hidden">
+            {/* HBL header row */}
+            <button
+              onClick={() => toggleHbl(hbl)}
+              className="w-full flex items-center gap-4 px-5 py-3.5 hover:bg-[#F8FAFC] transition-colors cursor-pointer"
+            >
+              <svg
+                className={`w-4 h-4 text-[#94A3B8] shrink-0 transition-transform ${isOpen ? "rotate-90" : ""}`}
+                fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />
+              </svg>
+              <div className="flex items-center gap-3 min-w-0 flex-1">
+                <span className="font-mono text-sm font-semibold text-[#0F172A]">{hbl}</span>
+                <span className="font-mono text-xs text-[#0369A1] font-semibold">{account}</span>
+              </div>
+              <div className="flex items-center gap-4 shrink-0 text-xs">
+                <span className="text-[#64748B]">
+                  <span className="font-semibold text-[#334155]">{items.length}</span> line{items.length !== 1 ? "s" : ""}
+                </span>
+                <span className="text-[#64748B]">
+                  <span className="font-semibold text-[#334155] tabular-nums">{totalPieces.toLocaleString()}</span> pcs
+                </span>
+                <span className="text-[#64748B]">
+                  <span className="font-semibold text-[#334155] tabular-nums">${totalValue.toLocaleString()}</span>
+                </span>
+                {pendingCount > 0 && (
+                  <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-amber-50 text-amber-700">
+                    <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                    {pendingCount} pending
+                  </span>
+                )}
+              </div>
+            </button>
+
+            {/* Expanded line items */}
+            {isOpen && (
+              <div className="border-t border-[#E2E8F0]">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="bg-[#F8FAFC] border-b border-[#E2E8F0]">
+                        {["Part", "Origin", "Qty", "Unit Price", "Line Value", "Weight", "Zone", "Status", "Created"].map((h) => (
+                          <th key={h} className="text-left px-4 py-2.5 text-xs font-semibold text-[#64748B] uppercase tracking-wider whitespace-nowrap">{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[#F1F5F9]">
+                      {items.map((row) => (
+                        <tr key={row.id} className="hover:bg-[#F8FAFC] transition-colors">
+                          <td className="px-4 py-3 font-semibold text-[#0F172A]">{row.part ?? "—"}</td>
+                          <td className="px-4 py-3 text-xs text-[#334155]">{row.country_origin ?? "—"}</td>
+                          <td className="px-4 py-3 tabular-nums text-[#334155] font-medium">{row.piece_count ?? "—"}</td>
+                          <td className="px-4 py-3 tabular-nums text-[#334155]">{row.unit_price != null ? `$${row.unit_price}` : "—"}</td>
+                          <td className="px-4 py-3 tabular-nums text-[#334155] font-medium">{row.line_value != null ? `$${row.line_value.toLocaleString()}` : "—"}</td>
+                          <td className="px-4 py-3 tabular-nums text-[#64748B] text-xs">{row.weight_kg != null ? `${row.weight_kg} kg` : "—"}</td>
+                          <td className="px-4 py-3">
+                            {row.zone_status ? (
+                              <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
+                                row.zone_status === "P" ? "bg-blue-50 text-blue-700" : "bg-purple-50 text-purple-700"
+                              }`}>{row.zone_status === "P" ? "Privileged" : "Foreign"}</span>
+                            ) : "—"}
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full ${
+                              row.concurrence ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"
+                            }`}>
+                              <span className={`w-1.5 h-1.5 rounded-full ${row.concurrence ? "bg-emerald-500" : "bg-amber-500"}`} />
+                              {row.concurrence ? "Approved" : "Pending"}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-xs text-[#94A3B8] whitespace-nowrap">
+                            {new Date(row.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
