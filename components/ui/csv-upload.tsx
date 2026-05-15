@@ -139,26 +139,24 @@ export function CsvUpload({ resourceType, label, invalidateKeys }: CsvUploadProp
             placeholder="Enter HBL number (e.g. TAL-20260501-A)"
             className="w-full px-3 py-2 rounded-md border border-[#E2E8F0] text-sm text-[#0F172A] placeholder:text-[#94A3B8] focus:outline-none focus:ring-2 focus:ring-[#0369A1] focus:border-transparent"
           />
-          {!hblValid && hbl.length === 0 && file && (
-            <p className="mt-1 text-xs text-red-500">HBL number is required before uploading</p>
-          )}
         </div>
       )}
 
-      {/* Drop zone */}
-      <div
-        onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
-        onDragLeave={() => setDragOver(false)}
-        onDrop={(e) => { e.preventDefault(); setDragOver(false); handleFile(e.dataTransfer.files[0]); }}
-        onClick={() => inputRef.current?.click()}
-        className={`relative border-2 border-dashed rounded-lg px-6 py-8 text-center cursor-pointer transition-colors ${
-          dragOver
-            ? "border-[#0369A1] bg-[#F0F9FF]"
-            : file
-              ? "border-emerald-300 bg-emerald-50"
-              : "border-[#E2E8F0] hover:border-[#0369A1] bg-[#FAFAFA]"
-        }`}
-      >
+      {/* Drop zone — only show after HBL is entered for Tally In */}
+      {hblValid && (
+        <div
+          onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+          onDragLeave={() => setDragOver(false)}
+          onDrop={(e) => { e.preventDefault(); setDragOver(false); handleFile(e.dataTransfer.files[0]); }}
+          onClick={() => inputRef.current?.click()}
+          className={`relative border-2 border-dashed rounded-lg px-6 py-8 text-center cursor-pointer transition-colors ${
+            dragOver
+              ? "border-[#0369A1] bg-[#F0F9FF]"
+              : file
+                ? "border-emerald-300 bg-emerald-50"
+                : "border-[#E2E8F0] hover:border-[#0369A1] bg-[#FAFAFA]"
+          }`}
+        >
         <input
           ref={inputRef}
           type="file"
@@ -184,6 +182,7 @@ export function CsvUpload({ resourceType, label, invalidateKeys }: CsvUploadProp
           </div>
         )}
       </div>
+      )}
 
       {/* Actions */}
       {file && (

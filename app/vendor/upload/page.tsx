@@ -137,51 +137,50 @@ export default function UploadPage() {
             placeholder="Enter HBL number (e.g. TAL-20260501-A)"
             className="w-full max-w-md px-3 py-2 rounded-md border border-[#E2E8F0] text-sm text-[#0F172A] placeholder:text-[#94A3B8] focus:outline-none focus:ring-2 focus:ring-[#0369A1] focus:border-transparent"
           />
-          {!hblValid && hbl.length === 0 && file && (
-            <p className="mt-1 text-xs text-red-500">HBL number is required before uploading</p>
-          )}
         </div>
       )}
 
-      {/* Drop zone */}
-      <div
-        onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
-        onDragLeave={() => setDragOver(false)}
-        onDrop={(e) => { e.preventDefault(); setDragOver(false); handleFile(e.dataTransfer.files[0]); }}
-        onClick={() => inputRef.current?.click()}
-        className={`relative border-2 border-dashed rounded-lg px-8 py-12 text-center cursor-pointer transition-colors ${
-          dragOver
-            ? "border-[#0369A1] bg-[#F0F9FF]"
-            : file
-              ? "border-emerald-300 bg-emerald-50"
-              : "border-[#E2E8F0] hover:border-[#0369A1] bg-white"
-        }`}
-      >
-        <input
-          ref={inputRef}
-          type="file"
-          accept=".csv,.xlsx"
-          onChange={(e) => handleFile(e.target.files?.[0])}
-          className="hidden"
-        />
-        {file ? (
-          <div>
-            <svg className="w-8 h-8 mx-auto text-emerald-500 mb-2" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
-            </svg>
-            <p className="text-sm font-medium text-[#0F172A]">{file.name}</p>
-            <p className="text-xs text-[#64748B] mt-1">{(file.size / 1024).toFixed(1)} KB — Click to change</p>
-          </div>
-        ) : (
-          <div>
-            <svg className="w-8 h-8 mx-auto text-[#94A3B8] mb-2" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5" />
-            </svg>
-            <p className="text-sm font-medium text-[#334155]">Drop your file here or click to browse</p>
-            <p className="text-xs text-[#94A3B8] mt-1">Supports .csv and .xlsx (max 10MB)</p>
-          </div>
-        )}
-      </div>
+      {/* Drop zone — only show after HBL is entered for Tally In */}
+      {hblValid && (
+        <div
+          onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+          onDragLeave={() => setDragOver(false)}
+          onDrop={(e) => { e.preventDefault(); setDragOver(false); handleFile(e.dataTransfer.files[0]); }}
+          onClick={() => inputRef.current?.click()}
+          className={`relative border-2 border-dashed rounded-lg px-8 py-12 text-center cursor-pointer transition-colors ${
+            dragOver
+              ? "border-[#0369A1] bg-[#F0F9FF]"
+              : file
+                ? "border-emerald-300 bg-emerald-50"
+                : "border-[#E2E8F0] hover:border-[#0369A1] bg-white"
+          }`}
+        >
+          <input
+            ref={inputRef}
+            type="file"
+            accept=".csv,.xlsx"
+            onChange={(e) => handleFile(e.target.files?.[0])}
+            className="hidden"
+          />
+          {file ? (
+            <div>
+              <svg className="w-8 h-8 mx-auto text-emerald-500 mb-2" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+              </svg>
+              <p className="text-sm font-medium text-[#0F172A]">{file.name}</p>
+              <p className="text-xs text-[#64748B] mt-1">{(file.size / 1024).toFixed(1)} KB — Click to change</p>
+            </div>
+          ) : (
+            <div>
+              <svg className="w-8 h-8 mx-auto text-[#94A3B8] mb-2" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5" />
+              </svg>
+              <p className="text-sm font-medium text-[#334155]">Drop your file here or click to browse</p>
+              <p className="text-xs text-[#94A3B8] mt-1">Supports .csv and .xlsx (max 10MB)</p>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Upload button */}
       {file && (
