@@ -39,17 +39,22 @@ interface CsvUploadProps {
 export function CsvUpload({ resourceType, label, invalidateKeys }: CsvUploadProps) {
   const [open, setOpen] = useState(false);
   const [file, setFile] = useState<File | null>(null);
+  const [hbl, setHbl] = useState("");
   const [dragOver, setDragOver] = useState(false);
   const [result, setResult] = useState<UploadResult | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const queryClient = useQueryClient();
+
+  const isTallyIn = resourceType === "ftz_line_item";
+  const hblValid = !isTallyIn || hbl.trim().length > 0;
 
   const mutation = useMutation({
     mutationFn: async () => {
       if (!file) throw new Error("No file selected");
       const form = new FormData();
       form.append("file", file);
-      const res = await api.post(`/upload/${resourceType}`, form, {
+      const params = isTallyIn ? `?hbl=${encodeURIComponent(hbl.trim())}` : "";
+      const res = await api.post(`/upload/${resourceType}${params}`, form, {
         headers: { "Content-Type": "multipart/form-data" },
       });
       return res.data as UploadResult;
@@ -116,12 +121,29 @@ export function CsvUpload({ resourceType, label, invalidateKeys }: CsvUploadProp
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-sm font-semibold text-[#020617]">Upload {label}</h3>
         <button
-          onClick={() => { setOpen(false); setFile(null); setResult(null); }}
+          onClick={() => { setOpen(false); setFile(null); setResult(null); setHbl(""); }}
           className="text-xs text-[#64748B] hover:text-[#334155] cursor-pointer"
         >
           Close
         </button>
       </div>
+
+      {/* HBL input for Tally In */}
+      {isTallyIn && (
+        <div className="mb-4">
+          <label className="block text-xs font-medium text-[#334155] mb-1.5">HBL Number <span className="text-red-500">*</span></label>
+          <input
+            type="text"
+            value={hbl}
+            onChange={(e) => { setHbl(e.target.value); setResult(null); }}
+            placeholder="Enter HBL number (e.g. TAL-20260501-A)"
+            className="w-full px-3 py-2 rounded-md border border-[#E2E8F0] text-sm text-[#0F172A] placeholder:text-[#94A3B8] focus:outline-none focus:ring-2 focus:ring-[#0369A1] focus:border-transparent"
+          />
+          {!hblValid && hbl.length === 0 && file && (
+            <p className="mt-1 text-xs text-red-500">HBL number is required before uploading</p>
+          )}
+        </div>
+      )}
 
       {/* Drop zone */}
       <div
@@ -168,7 +190,7 @@ export function CsvUpload({ resourceType, label, invalidateKeys }: CsvUploadProp
         <div className="mt-3 flex items-center gap-3">
           <button
             onClick={() => mutation.mutate()}
-            disabled={mutation.isPending}
+            disabled={mutation.isPending || !hblValid}
             className="px-4 py-2 rounded-md bg-[#0369A1] hover:bg-[#0284C7] text-white text-sm font-semibold transition-colors cursor-pointer disabled:opacity-50"
           >
             {mutation.isPending ? "Uploading..." : "Upload"}
