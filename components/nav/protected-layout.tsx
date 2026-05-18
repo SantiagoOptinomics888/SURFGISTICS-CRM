@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { getAuth } from "@/lib/auth";
 import Sidebar from "./sidebar";
+import ImpersonationBanner from "./impersonation-banner";
 
 interface Props {
   requiredRole?: "vendor" | "manager";
@@ -24,13 +25,16 @@ export default function ProtectedLayout({ requiredRole, children }: Props) {
   if (!user) return null;
 
   return (
-    <div className="flex min-h-screen bg-[#F8FAFC]">
-      <Sidebar />
-      <main className="flex-1 overflow-auto">
-        <div className="max-w-6xl mx-auto px-8 py-8">
-          {children}
-        </div>
-      </main>
+    <div className="min-h-screen bg-[#F8FAFC] flex flex-col">
+      <ImpersonationBanner />
+      <div className="flex flex-1">
+        <Sidebar />
+        <main className="flex-1 overflow-auto">
+          <div className="max-w-6xl mx-auto px-8 py-8">
+            {children}
+          </div>
+        </main>
+      </div>
     </div>
   );
 }

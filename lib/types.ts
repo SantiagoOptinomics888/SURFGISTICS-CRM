@@ -93,7 +93,7 @@ export interface VendorDetail {
   last_updated: string | null;
 }
 
-export const MODULE_PERMISSIONS = ["arts_part", "ftz", "inbond", "tally_out"] as const;
+export const MODULE_PERMISSIONS = ["parts", "tally_in", "inbond", "tally_out"] as const;
 export type ModulePermission = (typeof MODULE_PERMISSIONS)[number];
 
 export interface AdminUser {
