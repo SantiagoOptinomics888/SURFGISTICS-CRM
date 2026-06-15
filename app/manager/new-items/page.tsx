@@ -470,7 +470,7 @@ function ErrorPreviewModal({ entry, onClose }: { entry: AcelynkLogEntry; onClose
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-[#E2E8F0] bg-[#F8FAFC]">
-                      {["Row", "Part", "Tariff", "Country", "Issue"].map((h) => (
+                      {["Excel row", "Part", "Tariff", "Country", "Issue"].map((h) => (
                         <th key={h} className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wider text-[#64748B]">
                           {h}
                         </th>
