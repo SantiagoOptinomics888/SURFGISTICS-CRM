@@ -3,18 +3,19 @@
 import { useRef, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { api } from "@/lib/api";
+import { getAuth } from "@/lib/auth";
 import { PageHeader } from "@/components/ui/page-header";
 
-const RESOURCE_TYPES = [
-  { value: "arts_part", label: "Parts" },
-  { value: "ftz_line_item", label: "Tally In" },
-  { value: "inbond", label: "In-Bond" },
-  { value: "tally_out", label: "Tally Out" },
+const ALL_RESOURCE_TYPES = [
+  { value: "parts", label: "Parts", permission: "parts" },
+  { value: "ftz_line_item", label: "Tally In", permission: "tally_in" },
+  { value: "inbond", label: "In-Bond", permission: "inbond" },
+  { value: "tally_out", label: "Tally Out", permission: "tally_out" },
 ] as const;
 
 const TEMPLATE_HEADERS: Record<string, string[]> = {
-  arts_part: ["part_number", "description", "country", "unit_price", "tariff_num", "manufacturer", "warehouse", "value", "units_shipped", "is_duty_exempt", "filer_code", "supplier_id"],
-  ftz_line_item: ["Country_Origin", "Part", "Piece_Count", "Unit_Price", "Line_Value", "Weight_KG", "HTS_QTY_1", "HTS_QTY_2", "Line_Charge", "Reference_Qualifier", "Reference_ID", "Zone_Status", "SPI", "SPI_Country", "SPI_Secondary", "Lot_Number", "Remarks"],
+  parts: ["part_number", "description", "country", "unit_price", "tariff_num", "manufacturer", "warehouse", "value", "units_shipped", "is_duty_exempt", "filer_code", "supplier_id"],
+  ftz_line_item: ["Country_Origin", "Part", "Tariff_Number", "Piece_Count", "Unit_Price", "Line_Value", "Weight_KG", "HTS_QTY_1", "HTS_QTY_2", "Line_Charge", "Reference_Qualifier", "Reference_ID", "Zone_Status", "SPI", "SPI_Country", "SPI_Secondary", "Lot_Number", "Remarks"],
   inbond: ["container", "part_number", "tariff_number", "description", "piece_count", "value", "weight", "weight_uom", "marks_numbers", "manifest_uom"],
   tally_out: ["Delivery Order #", "Item Code", "Quantity Ordered", "Price Per Unit", "Foreign/Domestic Ind.", "3461-7512", "Operator ID", "Internal Order"],
 };
@@ -38,7 +39,11 @@ interface UploadResult {
 }
 
 export default function UploadPage() {
-  const [resourceType, setResourceType] = useState("arts_part");
+  const userPermissions = getAuth()?.permissions ?? [];
+  const RESOURCE_TYPES = ALL_RESOURCE_TYPES.filter(
+    (r) => userPermissions.includes(r.permission)
+  );
+  const [resourceType, setResourceType] = useState(RESOURCE_TYPES[0]?.value ?? "parts");
   const [file, setFile] = useState<File | null>(null);
   const [hbl, setHbl] = useState("");
   const [dragOver, setDragOver] = useState(false);

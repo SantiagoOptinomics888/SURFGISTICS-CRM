@@ -6,7 +6,7 @@ import { PageHeader } from "@/components/ui/page-header";
 import { Skeleton } from "@/components/ui/skeleton";
 import { DataToolbar } from "@/components/ui/data-toolbar";
 import { useDateFilter } from "@/lib/use-date-filter";
-import { exportToCsv } from "@/lib/export";
+import { exportData, type ExportFormat } from "@/lib/export";
 import { CsvUpload } from "@/components/ui/csv-upload";
 import type { TallyOut } from "@/lib/types";
 
@@ -22,9 +22,9 @@ export default function TallyOutPage() {
   const totalQty = filtered?.reduce((s, r) => s + (r.quantity_ordered ?? 0), 0) ?? 0;
   const totalValue = filtered?.reduce((s, r) => s + ((r.quantity_ordered ?? 0) * (r.price_per_unit ?? 0)), 0) ?? 0;
 
-  const handleExport = () => {
+  const handleExport = (format: ExportFormat) => {
     if (!filtered) return;
-    exportToCsv("tally_outs.csv", filtered, [
+    exportData(format, "tally_outs", filtered, [
       { key: "delivery_order_no", label: "Delivery Order #" },
       { key: "item_code", label: "Item Code" },
       { key: "quantity_ordered", label: "Quantity Ordered" },

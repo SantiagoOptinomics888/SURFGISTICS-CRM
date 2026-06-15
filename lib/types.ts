@@ -77,7 +77,7 @@ export interface TallyOut {
 }
 
 export interface RecordCounts {
-  arts_parts: number;
+  parts: number;
   ftz_line_items: number;
   inbonds: number;
   tally_outs: number;
@@ -108,7 +108,7 @@ export interface AdminUser {
 
 export interface ManagerStats {
   total_vendors: number;
-  total_arts_parts: number;
+  total_parts: number;
   total_ftz_line_items: number;
   total_inbonds: number;
   total_tally_outs: number;
@@ -135,8 +135,24 @@ export interface HblGroup {
 }
 
 export interface NewItemsResponse {
-  arts_parts: ArtsPart[];
+  parts: ArtsPart[];
   ftz_line_items: FtzLineItem[];
   inbonds: Inbond[];
   tally_outs: TallyOut[];
+}
+
+export type AcelynkResource = "parts" | "ftz_line_item" | "inbond" | "tally_out";
+export type AcelynkStatus = "pending" | "success" | "failed";
+
+export interface AcelynkLogEntry {
+  id: number;
+  created_at: string;
+  processed_at: string | null;
+  resource_type: AcelynkResource;
+  importer_account: string | null;
+  identifier: string;
+  status: AcelynkStatus;
+  error_message: string | null;
+  details: Record<string, unknown>;
+  retried_count: number;
 }

@@ -9,7 +9,7 @@ import { StatCard } from "@/components/ui/stat-card";
 import { DataToolbar } from "@/components/ui/data-toolbar";
 import { AcelynkModal } from "@/components/ui/acelynk-modal";
 import { useDateFilter } from "@/lib/use-date-filter";
-import { exportToCsv } from "@/lib/export";
+import { exportData, exportPartsForAcelynkData, type ExportFormat } from "@/lib/export";
 import type { VendorDetail, ArtsPart, FtzLineItem, Inbond, TallyOut } from "@/lib/types";
 
 type Tab = "arts_parts" | "ftz_line_items" | "inbonds" | "tally_outs";
@@ -37,7 +37,7 @@ export default function VendorDetailPage({ params }: { params: Promise<{ id: str
 
   const artsParts = useQuery<ArtsPart[]>({
     queryKey: ["vendor", id, "arts_parts"],
-    queryFn: () => api.get(`/manager/vendors/${id}/arts_parts`).then((r) => r.data),
+    queryFn: () => api.get(`/manager/vendors/${id}/parts`).then((r) => r.data),
     enabled: !!data,
   });
 
@@ -63,6 +63,14 @@ export default function VendorDetailPage({ params }: { params: Promise<{ id: str
   const ftzFilter = useDateFilter(ftzItems.data);
   const inbondFilter = useDateFilter(inbonds.data);
   const tallyFilter = useDateFilter(tallyOuts.data);
+
+  // Memoize HBL list BEFORE any early returns — React requires all hooks
+  // to be called in the same order on every render.
+  const ftzHbls = useMemo(() => {
+    if (!ftzFilter.filtered) return [];
+    const unique = new Set(ftzFilter.filtered.map((r) => r.hbl).filter(Boolean) as string[]);
+    return Array.from(unique);
+  }, [ftzFilter.filtered]);
 
   if (isLoading) {
     return (
@@ -96,7 +104,7 @@ export default function VendorDetailPage({ params }: { params: Promise<{ id: str
   const counts = [
     {
       label: "Parts",
-      value: data.record_counts.arts_parts,
+      value: data.record_counts.parts,
       tab: "arts_parts" as Tab,
       icon: (
         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor">
@@ -136,22 +144,19 @@ export default function VendorDetailPage({ params }: { params: Promise<{ id: str
     },
   ];
 
-  const handleExport = () => {
+  const handleExport = (format: ExportFormat) => {
     const account = data.importer_account ?? "vendor";
     if (activeTab === "arts_parts" && artsFilter.filtered) {
-      exportToCsv(`${account}_arts_parts.csv`, artsFilter.filtered, [
-        { key: "part_number", label: "Part #" },
-        { key: "description", label: "Description" },
-        { key: "country", label: "Country" },
-        { key: "tariff_num", label: "Tariff" },
-        { key: "unit_price", label: "Unit Price" },
-        { key: "value", label: "Value" },
-        { key: "units_shipped", label: "Units" },
-        { key: "is_duty_exempt", label: "Duty Exempt" },
-        { key: "supplier_id", label: "Supplier" },
-      ]);
+      // Admin parts export uses the full 42-column Acelynk template so the
+      // file can be uploaded straight to Acelynk's Parts Upload. The
+      // vendor-facing /vendor/arts-parts export keeps the shorter summary.
+      exportPartsForAcelynkData(
+        format,
+        `${account}_parts_acelynk`,
+        artsFilter.filtered as unknown as Record<string, unknown>[],
+      );
     } else if (activeTab === "ftz_line_items" && ftzFilter.filtered) {
-      exportToCsv(`${account}_ftz_line_items.csv`, ftzFilter.filtered, [
+      exportData(format, `${account}_ftz_line_items`, ftzFilter.filtered, [
         { key: "country_origin", label: "Country_Origin" },
         { key: "part", label: "Part" },
         { key: "piece_count", label: "Piece_Count" },
@@ -168,7 +173,7 @@ export default function VendorDetailPage({ params }: { params: Promise<{ id: str
         { key: "concurrence", label: "Concurrence" },
       ]);
     } else if (activeTab === "inbonds" && inbondFilter.filtered) {
-      exportToCsv(`${account}_inbonds.csv`, inbondFilter.filtered, [
+      exportData(format, `${account}_inbonds`, inbondFilter.filtered, [
         { key: "container", label: "Container" },
         { key: "marks_numbers", label: "Marks" },
         { key: "part_number", label: "Part #" },
@@ -179,7 +184,7 @@ export default function VendorDetailPage({ params }: { params: Promise<{ id: str
         { key: "weight", label: "Weight" },
       ]);
     } else if (activeTab === "tally_outs" && tallyFilter.filtered) {
-      exportToCsv(`${account}_tally_outs.csv`, tallyFilter.filtered, [
+      exportData(format, `${account}_tally_outs`, tallyFilter.filtered, [
         { key: "delivery_order_no", label: "Delivery Order #" },
         { key: "item_code", label: "Item Code" },
         { key: "quantity_ordered", label: "Quantity Ordered" },
@@ -203,12 +208,6 @@ export default function VendorDetailPage({ params }: { params: Promise<{ id: str
     : activeTab === "ftz_line_items" ? ftzItems.isLoading
     : activeTab === "inbonds" ? inbonds.isLoading
     : tallyOuts.isLoading;
-
-  const ftzHbls = useMemo(() => {
-    if (!ftzFilter.filtered) return [];
-    const unique = new Set(ftzFilter.filtered.map((r) => r.hbl).filter(Boolean) as string[]);
-    return Array.from(unique);
-  }, [ftzFilter.filtered]);
 
   return (
     <div>

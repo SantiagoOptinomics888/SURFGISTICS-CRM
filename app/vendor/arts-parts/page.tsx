@@ -6,7 +6,6 @@ import { PageHeader } from "@/components/ui/page-header";
 import { Skeleton } from "@/components/ui/skeleton";
 import { DataToolbar } from "@/components/ui/data-toolbar";
 import { useDateFilter } from "@/lib/use-date-filter";
-import { exportToCsv } from "@/lib/export";
 import { CsvUpload } from "@/components/ui/csv-upload";
 import type { ArtsPart } from "@/lib/types";
 
@@ -16,7 +15,7 @@ const fmt = (n: number | null, prefix = "") =>
 export default function ArtsPartsPage() {
   const { data, isLoading, error } = useQuery<ArtsPart[]>({
     queryKey: ["arts_parts"],
-    queryFn: () => api.get("/arts_part").then((r) => r.data),
+    queryFn: () => api.get("/parts").then((r) => r.data),
   });
 
   const { filtered, dateFrom, dateTo, setDateFrom, setDateTo } = useDateFilter(data);
@@ -24,27 +23,11 @@ export default function ArtsPartsPage() {
   const totalValue = filtered?.reduce((s, r) => s + (r.value ?? 0), 0) ?? 0;
   const exemptCount = filtered?.filter((r) => r.is_duty_exempt).length ?? 0;
 
-  const handleExport = () => {
-    if (!filtered) return;
-    exportToCsv("arts_parts.csv", filtered, [
-      { key: "part_number", label: "Part #" },
-      { key: "description", label: "Description" },
-      { key: "country", label: "Country" },
-      { key: "tariff_num", label: "Tariff" },
-      { key: "unit_price", label: "Unit Price" },
-      { key: "value", label: "Value" },
-      { key: "units_shipped", label: "Units" },
-      { key: "is_duty_exempt", label: "Duty Exempt" },
-      { key: "supplier_id", label: "Supplier" },
-      { key: "filer_code", label: "Filer" },
-    ]);
-  };
-
   return (
     <div>
       <PageHeader title="Parts" subtitle={filtered ? `${filtered.length} parts · $${totalValue.toLocaleString()} total value` : undefined} />
 
-      <CsvUpload resourceType="arts_part" label="Parts" invalidateKeys={[["arts_parts"]]} />
+      <CsvUpload resourceType="parts" label="Parts" invalidateKeys={[["arts_parts"]]} />
 
       {/* Summary bar */}
       {filtered && filtered.length > 0 && (
@@ -62,13 +45,12 @@ export default function ArtsPartsPage() {
         </div>
       )}
 
-      {/* Toolbar */}
+      {/* Toolbar — vendors don't get an export button on Parts (admin-only) */}
       <DataToolbar
         dateFrom={dateFrom}
         dateTo={dateTo}
         onDateFromChange={setDateFrom}
         onDateToChange={setDateTo}
-        onExport={handleExport}
         count={filtered?.length}
       />
 
@@ -151,9 +133,11 @@ export default function ArtsPartsPage() {
 }
 
 function countryFlag(code: string): string {
-  const flags: Record<string, string> = {
-    US: "\u{1F1FA}\u{1F1F8}", CN: "\u{1F1E8}\u{1F1F3}", JP: "\u{1F1EF}\u{1F1F5}", DE: "\u{1F1E9}\u{1F1EA}", MX: "\u{1F1F2}\u{1F1FD}",
-    KR: "\u{1F1F0}\u{1F1F7}", CA: "\u{1F1E8}\u{1F1E6}", GB: "\u{1F1EC}\u{1F1E7}", FR: "\u{1F1EB}\u{1F1F7}", BR: "\u{1F1E7}\u{1F1F7}",
-  };
-  return flags[code] ?? code;
+  // Convert a 2-letter ISO code to its flag emoji. Returns "" for non-2-letter
+  // strings (e.g. "USA", "PRC") so the table doesn't render the code twice.
+  if (!code || code.length !== 2) return "";
+  const upper = code.toUpperCase();
+  if (!/^[A-Z]{2}$/.test(upper)) return "";
+  const codePoints = [...upper].map((c) => 0x1f1e6 + c.charCodeAt(0) - 65);
+  return String.fromCodePoint(...codePoints);
 }

@@ -1,554 +1,527 @@
 "use client";
 
-import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { PageHeader } from "@/components/ui/page-header";
 import { Skeleton } from "@/components/ui/skeleton";
-import { exportToCsv, exportPartsForAcelynk } from "@/lib/export";
-import type { NewItemsResponse, ArtsPart, FtzLineItem, Inbond, TallyOut } from "@/lib/types";
+import type { AcelynkLogEntry, AcelynkResource } from "@/lib/types";
 
-type DataType = "arts_parts" | "ftz_line_items" | "inbonds" | "tally_outs";
+type ModuleKey = AcelynkResource;
 
-const TABS: { key: DataType; label: string }[] = [
-  { key: "arts_parts", label: "Parts" },
-  { key: "ftz_line_items", label: "Tally In" },
-  { key: "inbonds", label: "In-Bond" },
-  { key: "tally_outs", label: "Tally Out" },
+const MODULES: { key: ModuleKey; label: string; automated: boolean }[] = [
+  { key: "parts", label: "Parts", automated: true },
+  { key: "ftz_line_item", label: "Tally In", automated: true },
+  { key: "inbond", label: "In-Bonds", automated: false },
+  { key: "tally_out", label: "Tally Out", automated: false },
 ];
 
-function defaultSince() {
-  const d = new Date();
-  d.setDate(d.getDate() - 7);
-  return d.toISOString().slice(0, 10);
+const STATUS_STYLES: Record<string, string> = {
+  pending: "bg-amber-50 text-amber-700 border-amber-200",
+  success: "bg-emerald-50 text-emerald-700 border-emerald-200",
+  failed: "bg-red-50 text-red-700 border-red-200",
+};
+
+const STATUS_DOTS: Record<string, string> = {
+  pending: "bg-amber-500",
+  success: "bg-emerald-500",
+  failed: "bg-red-500",
+};
+
+const STATUS_LABELS: Record<string, string> = {
+  pending: "Pending",
+  success: "Sent",
+  failed: "Failed",
+};
+
+function formatRelative(iso: string): string {
+  const d = new Date(iso);
+  const diff = Date.now() - d.getTime();
+  const min = Math.floor(diff / 60_000);
+  if (min < 1) return "just now";
+  if (min < 60) return `${min} min ago`;
+  const hours = Math.floor(min / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 7) return `${days}d ago`;
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
 
-export default function NewItemsPage() {
-  const [since, setSince] = useState(defaultSince);
-  const [until, setUntil] = useState("");
-  const [account, setAccount] = useState("");
-  const [activeTab, setActiveTab] = useState<DataType>("arts_parts");
+function redactScreenshotData(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(redactScreenshotData);
+  if (!value || typeof value !== "object") return value;
 
-  const params = new URLSearchParams();
-  if (since) params.set("since", since);
-  if (until) params.set("until", until);
-  if (account) params.set("account", account);
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>).map(([key, item]) => [
+      key,
+      key === "data_base64" && typeof item === "string" ? `[base64 image data, ${item.length} chars]` : redactScreenshotData(item),
+    ])
+  );
+}
 
-  const { data, isLoading } = useQuery<NewItemsResponse>({
-    queryKey: ["new_items", since, until, account],
-    queryFn: () => api.get(`/manager/new-items?${params}`).then((r) => r.data),
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
+}
+
+function asString(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value : null;
+}
+
+function asNumber(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function asStringList(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string" && item.trim().length > 0) : [];
+}
+
+function partErrorsFromDetails(details: Record<string, unknown>) {
+  const raw = Array.isArray(details.part_errors) ? details.part_errors : [];
+  return raw.map((item) => {
+    const record = asRecord(item);
+    return {
+      excelRow: asNumber(record.excel_row),
+      partNumber: asString(record.part_number),
+      description: asString(record.description),
+      tariff: asString(record.tariff),
+      country: asString(record.country),
+      issues: asStringList(record.issues),
+    };
   });
+}
 
-  // Fetch all vendors for the dropdown (independent of date filter)
-  const { data: vendors } = useQuery<{ importer_account: string | null }[]>({
-    queryKey: ["manager_vendors_list"],
-    queryFn: () => api.get("/manager/vendors").then((r) => r.data),
-  });
+function detailLinesFromDetails(details: Record<string, unknown>): string[] {
+  return [
+    ...asStringList(details.details),
+    ...asStringList(details.acelynk_save_errors),
+  ];
+}
 
-  const allAccounts = vendors
-    ? [...new Set(vendors.map((v) => v.importer_account).filter(Boolean) as string[])].sort()
-    : [];
+function friendlyFixes(entry: AcelynkLogEntry, details: Record<string, unknown>, partErrors: ReturnType<typeof partErrorsFromDetails>) {
+  const message = `${entry.error_message ?? ""} ${detailLinesFromDetails(details).join(" ")}`.toLowerCase();
+  const fixes = new Set<string>();
 
-  const counts = data
-    ? {
-        arts_parts: data.arts_parts.length,
-        ftz_line_items: data.ftz_line_items.length,
-        inbonds: data.inbonds.length,
-        tally_outs: data.tally_outs.length,
-      }
-    : null;
-
-  const totalNew = counts
-    ? counts.arts_parts + counts.ftz_line_items + counts.inbonds + counts.tally_outs
-    : 0;
-
-  function handleExport() {
-    if (!data) return;
-    if (activeTab === "arts_parts") {
-      exportPartsForAcelynk("new_parts.csv", data.arts_parts as unknown as Record<string, unknown>[]);
-    } else if (activeTab === "ftz_line_items") {
-      exportToCsv("new_tally_in.csv", data.ftz_line_items, [
-        { key: "importer_account", label: "Account" },
-        { key: "hbl", label: "Talian" },
-        { key: "country_origin", label: "Country_Origin" },
-        { key: "part", label: "Part" },
-        { key: "piece_count", label: "Piece_Count" },
-        { key: "unit_price", label: "Unit_Price" },
-        { key: "line_value", label: "Line_Value" },
-        { key: "weight_kg", label: "Weight_KG" },
-        { key: "hts_qty_1", label: "HTS_QTY_1" },
-        { key: "hts_qty_2", label: "HTS_QTY_2" },
-        { key: "line_charge", label: "Line_Charge" },
-        { key: "zone_status", label: "Zone_Status" },
-        { key: "lot_number", label: "Lot_Number" },
-        { key: "remarks", label: "Remarks" },
-        { key: "concurrence", label: "Concurrence" },
-        { key: "created_at", label: "Created" },
-      ]);
-    } else if (activeTab === "inbonds") {
-      exportToCsv("new_inbonds.csv", data.inbonds, [
-        { key: "importer_account", label: "Account" },
-        { key: "container", label: "Container" },
-        { key: "marks_numbers", label: "Marks" },
-        { key: "part_number", label: "Part #" },
-        { key: "tariff_number", label: "Tariff" },
-        { key: "description", label: "Description" },
-        { key: "piece_count", label: "Qty" },
-        { key: "value", label: "Value" },
-        { key: "weight", label: "Weight" },
-        { key: "weight_uom", label: "Weight UOM" },
-        { key: "created_at", label: "Created" },
-      ]);
-    } else if (activeTab === "tally_outs") {
-      exportToCsv("new_tally_outs.csv", data.tally_outs, [
-        { key: "importer_account", label: "Account" },
-        { key: "delivery_order_no", label: "Delivery Order #" },
-        { key: "item_code", label: "Item Code" },
-        { key: "quantity_ordered", label: "Quantity Ordered" },
-        { key: "price_per_unit", label: "Price Per Unit" },
-        { key: "foreign_domestic_ind", label: "Foreign/Domestic" },
-        { key: "doc_code_3461_7512", label: "3461-7512" },
-        { key: "operator_id", label: "Operator ID" },
-        { key: "internal_order_flag", label: "Internal Order" },
-        { key: "created_at", label: "Created" },
-      ]);
+  for (const partError of partErrors) {
+    for (const issue of partError.issues) {
+      fixes.add(issue);
     }
   }
 
+  if (message.includes("tariff")) {
+    fixes.add("Check the tariff number. Acelynk usually expects the HTS/tariff value without periods or extra characters.");
+  }
+  if (message.includes("duplicate")) {
+    fixes.add("Remove duplicate part numbers from the upload, or keep one row per importer and part number.");
+  }
+  if (message.includes("cannot find column") || message.includes("column")) {
+    fixes.add("Use the latest Acelynk template and keep the column headers exactly as downloaded.");
+  }
+  if (message.includes("did not finish accepting") || message.includes("hasfile")) {
+    fixes.add("Try reprocessing. If it repeats, confirm the file was attached in Acelynk before pressing Upload.");
+  }
+  if (message.includes("did not finish saving") || message.includes("after confirm")) {
+    fixes.add("The file validated, but Acelynk did not complete the save. Reprocess once, then check whether those rows already exist in Acelynk.");
+  }
+  if (message.includes("page.screenshot") || message.includes("browser has been closed")) {
+    fixes.add("The browser session closed during the run. Reprocess after confirming no other Acelynk watcher is running.");
+  }
+  if (fixes.size === 0) {
+    fixes.add("Review the screenshot and the affected rows below, then correct the source upload and reprocess.");
+  }
+
+  return Array.from(fixes);
+}
+
+function friendlyErrorSummary(entry: AcelynkLogEntry) {
+  const details = asRecord(entry.details);
+  const confirmSummary = asRecord(details.confirm_summary);
+  const uploadSummary = asRecord(details.upload_summary);
+  const partErrors = partErrorsFromDetails(details);
+  const detailLines = detailLinesFromDetails(details);
+  const rowCount = asNumber(details.row_count) ?? asNumber(confirmSummary.rows) ?? asNumber(uploadSummary.total_rows);
+  const validCount = asNumber(details.valid_count) ?? asNumber(confirmSummary.valid);
+  const detectedErrorCount = asNumber(details.error_count) ?? asNumber(confirmSummary.errors) ?? partErrors.length;
+  const errorCount = detectedErrorCount > 0 ? detectedErrorCount : null;
+  const fileName = asString(details.file_name);
+  const title = errorCount && errorCount > 0
+    ? `${errorCount} row${errorCount === 1 ? "" : "s"} need attention`
+    : "Acelynk could not finish this upload";
+  const explanation = entry.error_message
+    ? entry.error_message.replace(/^Acelynk\s*/i, "Acelynk ")
+    : "The watcher reached Acelynk, but the upload did not complete successfully.";
+
+  return {
+    title,
+    explanation,
+    details,
+    fileName,
+    rowCount,
+    validCount,
+    errorCount,
+    partErrors,
+    detailLines,
+    fixes: friendlyFixes(entry, details, partErrors),
+  };
+}
+
+export default function ModulesPage() {
+  const [activeTab, setActiveTab] = useState<ModuleKey>("parts");
+  const activeModule = MODULES.find((m) => m.key === activeTab)!;
+
   return (
     <div>
-      <PageHeader title="New Items" subtitle="Review new vendor submissions for Acelynk entry" />
+      <PageHeader
+        title="Modules"
+        subtitle="Acelynk push status by module — manage retries when a vendor upload fails to reach Acelynk."
+      />
 
-      {/* Filters */}
-      <div className="flex flex-wrap items-center gap-3 mb-6">
-        <div className="flex items-center gap-2">
-          <label className="text-xs font-medium text-[#64748B] uppercase tracking-wider">Since</label>
-          <input
-            type="date"
-            value={since}
-            onChange={(e) => setSince(e.target.value)}
-            className="border border-[#E2E8F0] rounded-md px-2.5 py-1.5 text-sm text-[#334155] bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400"
-          />
-        </div>
-        <div className="flex items-center gap-2">
-          <label className="text-xs font-medium text-[#64748B] uppercase tracking-wider">Until</label>
-          <input
-            type="date"
-            value={until}
-            onChange={(e) => setUntil(e.target.value)}
-            className="border border-[#E2E8F0] rounded-md px-2.5 py-1.5 text-sm text-[#334155] bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400"
-          />
-        </div>
-        <div className="flex items-center gap-2">
-          <label className="text-xs font-medium text-[#64748B] uppercase tracking-wider">Vendor</label>
-          <select
-            value={account}
-            onChange={(e) => setAccount(e.target.value)}
-            className="border border-[#E2E8F0] rounded-md px-2.5 py-1.5 text-sm text-[#334155] bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400"
-          >
-            <option value="">All Vendors</option>
-            {allAccounts.map((acc) => (
-              <option key={acc} value={acc}>{acc}</option>
-            ))}
-          </select>
-        </div>
-        {(since || until || account) && (
-          <button
-            onClick={() => { setSince(defaultSince()); setUntil(""); setAccount(""); }}
-            className="text-xs text-[#64748B] hover:text-[#334155] underline underline-offset-2 cursor-pointer"
-          >
-            Reset
-          </button>
-        )}
-      </div>
-
-      {/* Summary cards */}
-      {isLoading ? (
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 mb-6">
-          {[...Array(4)].map((_, i) => (
-            <div key={i} className="bg-white border border-[#E2E8F0] rounded-lg p-4">
-              <Skeleton className="h-3 w-16 mb-2" /><Skeleton className="h-7 w-8" />
-            </div>
-          ))}
-        </div>
-      ) : counts && (
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-5 mb-6">
-          {TABS.map(({ key, label }) => (
+      {/* Tabs */}
+      <div className="border-b border-[#E2E8F0] mb-5">
+        <nav className="flex gap-0 -mb-px">
+          {MODULES.map((m) => (
             <button
-              key={key}
-              onClick={() => setActiveTab(key)}
-              className={`text-left bg-white border rounded-lg p-4 transition-colors cursor-pointer ${
-                activeTab === key ? "border-[#0369A1] ring-1 ring-[#0369A1]/20" : "border-[#E2E8F0] hover:border-[#94A3B8]"
+              key={m.key}
+              onClick={() => setActiveTab(m.key)}
+              className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors cursor-pointer ${
+                activeTab === m.key
+                  ? "border-[#0369A1] text-[#0369A1]"
+                  : "border-transparent text-[#64748B] hover:text-[#334155] hover:border-[#CBD5E1]"
               }`}
             >
-              <p className="text-xs font-medium text-[#64748B] uppercase tracking-wider">{label}</p>
-              <p className={`text-2xl font-semibold mt-1 tabular-nums ${counts[key] > 0 ? "text-[#0369A1]" : "text-[#CBD5E1]"}`}>
-                {counts[key]}
-              </p>
+              {m.label}
+              {!m.automated && (
+                <span className="ml-2 text-[10px] uppercase tracking-wider text-[#94A3B8]">manual</span>
+              )}
             </button>
           ))}
-          <div className="bg-[#0F172A] rounded-lg p-4 flex flex-col justify-center">
-            <p className="text-xs font-medium text-[#64748B] uppercase tracking-wider">Total New</p>
-            <p className="text-2xl font-semibold text-white mt-1 tabular-nums">{totalNew}</p>
-          </div>
-        </div>
-      )}
+        </nav>
+      </div>
 
-      {/* Export toolbar */}
-      {data && (
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-2">
-            {TABS.map(({ key, label }) => (
-              <button
-                key={key}
-                onClick={() => setActiveTab(key)}
-                className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors cursor-pointer ${
-                  activeTab === key
-                    ? "bg-[#0369A1] text-white"
-                    : "bg-white border border-[#E2E8F0] text-[#334155] hover:border-[#0369A1]"
-                }`}
-              >
-                {label} ({counts?.[key] ?? 0})
-              </button>
-            ))}
-          </div>
-          <button
-            onClick={handleExport}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md border border-[#E2E8F0] bg-white text-[#334155] hover:bg-[#F8FAFC] transition-colors cursor-pointer"
-          >
-            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3" />
-            </svg>
-            Export {TABS.find((t) => t.key === activeTab)?.label} CSV
-          </button>
-        </div>
+      {activeModule.automated ? (
+        <ModuleStatusTable resourceType={activeTab} />
+      ) : (
+        <ManualModulePlaceholder label={activeModule.label} />
       )}
-
-      {/* Data table */}
-      {isLoading && (
-        <div className="bg-white border border-[#E2E8F0] rounded-lg overflow-hidden">
-          {[...Array(5)].map((_, i) => (
-            <div key={i} className="flex gap-4 px-5 py-3.5 border-b border-[#F1F5F9]">
-              <Skeleton className="h-3.5 w-20" /><Skeleton className="h-3.5 w-32" /><Skeleton className="h-3.5 w-16 ml-auto" />
-            </div>
-          ))}
-        </div>
-      )}
-
-      {data && activeTab === "arts_parts" && <PartsTable rows={data.arts_parts} />}
-      {data && activeTab === "ftz_line_items" && <TallyInTable rows={data.ftz_line_items} />}
-      {data && activeTab === "inbonds" && <InbondTable rows={data.inbonds} />}
-      {data && activeTab === "tally_outs" && <TallyOutTable rows={data.tally_outs} />}
     </div>
   );
 }
 
-function PartsTable({ rows }: { rows: ArtsPart[] }) {
-  const [showMissingTariff, setShowMissingTariff] = useState(false);
-  const missingCount = rows.filter((r) => !r.tariff_num).length;
-  const displayed = showMissingTariff ? rows.filter((r) => !r.tariff_num) : rows;
+function ModuleStatusTable({ resourceType }: { resourceType: ModuleKey }) {
+  const queryClient = useQueryClient();
+  const [errorPreview, setErrorPreview] = useState<AcelynkLogEntry | null>(null);
+
+  const { data, isLoading, error } = useQuery<AcelynkLogEntry[]>({
+    queryKey: ["acelynk-log", resourceType],
+    queryFn: () =>
+      api.get(`/manager/acelynk-log?resource_type=${resourceType}&limit=200`).then((r) => r.data),
+    refetchInterval: 15_000,
+  });
+
+  const reprocess = useMutation({
+    mutationFn: (id: number) => api.post(`/manager/acelynk-log/${id}/reprocess`),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["acelynk-log", resourceType] }),
+  });
+
+  if (isLoading) {
+    return (
+      <div className="bg-white border border-[#E2E8F0] rounded-lg">
+        {[...Array(4)].map((_, i) => (
+          <div key={i} className="flex gap-4 px-5 py-4 border-b border-[#F1F5F9]">
+            <Skeleton className="h-3.5 w-32" />
+            <Skeleton className="h-3.5 w-40" />
+            <Skeleton className="h-3.5 w-24 ml-auto" />
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex items-center gap-2 px-4 py-3 rounded-lg bg-red-50 border border-red-100 text-sm text-red-600">
+        Failed to load Acelynk log.
+      </div>
+    );
+  }
+
+  const rows = data ?? [];
 
   return (
-    <div>
-      {/* Missing tariff alert */}
-      {missingCount > 0 && (
-        <button
-          onClick={() => setShowMissingTariff((v) => !v)}
-          className={`mb-3 w-full flex items-center justify-between px-4 py-3 rounded-lg border text-sm transition-colors cursor-pointer ${
-            showMissingTariff
-              ? "bg-amber-50 border-amber-300 text-amber-800"
-              : "bg-amber-50/60 border-amber-200 text-amber-700 hover:border-amber-300"
-          }`}
-        >
-          <div className="flex items-center gap-2">
-            <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" />
-            </svg>
-            <span>
-              <span className="font-semibold">{missingCount} part{missingCount !== 1 ? "s" : ""}</span> missing Tariff # — vendor follow-up needed
-            </span>
-          </div>
-          <span className="text-xs font-medium underline underline-offset-2">
-            {showMissingTariff ? "Show all" : "Show flagged"}
-          </span>
-        </button>
-      )}
-
+    <>
       <div className="bg-white border border-[#E2E8F0] rounded-lg overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-[#E2E8F0] bg-[#F8FAFC]">
-                {["", "Account", "Part #", "Description", "Country", "Tariff", "Unit Price", "Value", "Units", "Duty", "Created"].map((h) => (
-                  <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-[#64748B] uppercase tracking-wider whitespace-nowrap">{h}</th>
+                {["Account", "Identifier", "Status", "Processed", "Retries", ""].map((h) => (
+                  <th
+                    key={h}
+                    className="text-left px-4 py-3 text-xs font-semibold text-[#64748B] uppercase tracking-wider whitespace-nowrap"
+                  >
+                    {h}
+                  </th>
                 ))}
               </tr>
             </thead>
             <tbody className="divide-y divide-[#F1F5F9]">
-              {displayed.length === 0 && (
-                <tr><td colSpan={11} className="px-5 py-12 text-center text-sm text-[#94A3B8]">
-                  {showMissingTariff ? "All parts have a Tariff #" : "No new parts in this period"}
-                </td></tr>
+              {rows.length === 0 && (
+                <tr>
+                  <td colSpan={6} className="px-5 py-12 text-center text-sm text-[#94A3B8]">
+                    No Acelynk push attempts logged yet for this module.
+                  </td>
+                </tr>
               )}
-              {displayed.map((row) => {
-                const missingTariff = !row.tariff_num;
-                return (
-                  <tr key={row.id} className={`transition-colors ${missingTariff ? "bg-amber-50/40 hover:bg-amber-50" : "hover:bg-[#F8FAFC]"}`}>
-                    <td className="px-4 py-3 w-5">
-                      {missingTariff && (
-                        <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-amber-100" title="Missing Tariff #">
-                          <svg className="w-3.5 h-3.5 text-amber-600" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m0 3.75h.008v.008H12v-.008ZM21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
-                          </svg>
-                        </span>
+              {rows.map((row) => (
+                <tr key={row.id} className="hover:bg-[#F8FAFC] transition-colors">
+                  <td className="px-4 py-3 font-mono text-xs text-[#0369A1] font-semibold whitespace-nowrap">
+                    {row.importer_account ?? "—"}
+                  </td>
+                  <td className="px-4 py-3 font-mono text-xs text-[#334155] truncate max-w-[260px]">
+                    {row.identifier}
+                  </td>
+                  <td className="px-4 py-3">
+                    <span
+                      className={`inline-flex items-center gap-1.5 text-xs font-medium px-2 py-0.5 rounded-full border ${
+                        STATUS_STYLES[row.status] ?? "bg-[#F1F5F9] text-[#64748B] border-[#E2E8F0]"
+                      }`}
+                    >
+                      <span className={`w-1.5 h-1.5 rounded-full ${STATUS_DOTS[row.status] ?? "bg-[#94A3B8]"}`} />
+                      {STATUS_LABELS[row.status] ?? row.status}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 text-xs text-[#475569] whitespace-nowrap">
+                    {row.processed_at ? formatRelative(row.processed_at) : formatRelative(row.created_at)}
+                  </td>
+                  <td className="px-4 py-3 text-xs text-[#64748B] tabular-nums">{row.retried_count || "—"}</td>
+                  <td className="px-4 py-3 text-right whitespace-nowrap">
+                    <div className="inline-flex items-center gap-2">
+                      {row.status === "failed" && row.error_message && (
+                        <button
+                          onClick={() => setErrorPreview(row)}
+                          className="text-xs font-medium px-2.5 py-1 rounded border border-[#E2E8F0] text-[#334155] hover:bg-white hover:border-[#CBD5E1] transition-colors cursor-pointer"
+                        >
+                          View error
+                        </button>
                       )}
-                    </td>
-                    <td className="px-4 py-3 font-mono text-xs font-semibold text-[#0369A1]">{row.importer_account ?? "—"}</td>
-                    <td className="px-4 py-3 font-semibold text-[#0F172A] whitespace-nowrap">{row.part_number ?? "—"}</td>
-                    <td className="px-4 py-3 text-[#475569] max-w-[160px] truncate">{row.description ?? "—"}</td>
-                    <td className="px-4 py-3 text-xs font-medium text-[#334155]">{row.country ?? "—"}</td>
-                    <td className="px-4 py-3 font-mono text-xs">
-                      {row.tariff_num ? (
-                        <span className="text-[#64748B]">{row.tariff_num}</span>
-                      ) : (
-                        <span className="text-amber-600 font-semibold">MISSING</span>
+                      {row.status === "failed" && (
+                        <button
+                          onClick={() => reprocess.mutate(row.id)}
+                          disabled={reprocess.isPending}
+                          className="text-xs font-medium px-2.5 py-1 rounded bg-[#0369A1] text-white hover:bg-[#0284C7] transition-colors cursor-pointer disabled:opacity-50"
+                        >
+                          {reprocess.isPending ? "…" : "Reprocess"}
+                        </button>
                       )}
-                    </td>
-                    <td className="px-4 py-3 tabular-nums text-[#334155]">{row.unit_price != null ? `$${row.unit_price}` : "—"}</td>
-                    <td className="px-4 py-3 tabular-nums text-[#334155] font-medium">{row.value != null ? `$${row.value.toLocaleString()}` : "—"}</td>
-                    <td className="px-4 py-3 tabular-nums text-[#334155]">{row.units_shipped ?? "—"}</td>
-                    <td className="px-4 py-3">
-                      <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
-                        row.is_duty_exempt ? "bg-emerald-50 text-emerald-700" : "bg-[#F1F5F9] text-[#64748B]"
-                      }`}>{row.is_duty_exempt === null ? "—" : row.is_duty_exempt ? "Exempt" : "Taxable"}</span>
-                    </td>
-                    <td className="px-4 py-3 text-xs text-[#94A3B8] whitespace-nowrap">
-                      {new Date(row.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
-                    </td>
-                  </tr>
-                );
-              })}
+                    </div>
+                  </td>
+                </tr>
+              ))}
             </tbody>
           </table>
+        </div>
+      </div>
+      <p className="text-xs text-[#94A3B8] mt-3">
+        Auto-refreshing every 15s. The watcher fires every 60s — a queued Reprocess may take up to a minute to pick up.
+      </p>
+
+      {errorPreview && (
+        <ErrorPreviewModal entry={errorPreview} onClose={() => setErrorPreview(null)} />
+      )}
+    </>
+  );
+}
+
+function ErrorPreviewModal({ entry, onClose }: { entry: AcelynkLogEntry; onClose: () => void }) {
+  const [screenshotUrl, setScreenshotUrl] = useState<string | null>(null);
+  const [screenshotState, setScreenshotState] = useState<"loading" | "ready" | "missing">("loading");
+  const [showTechnicalDetails, setShowTechnicalDetails] = useState(false);
+  const summary = friendlyErrorSummary(entry);
+  const detailsForDisplay = redactScreenshotData(entry.details ?? {});
+
+  useEffect(() => {
+    let active = true;
+    let objectUrl: string | null = null;
+    setScreenshotUrl(null);
+    setScreenshotState("loading");
+
+    api
+      .get(`/manager/acelynk-log/${entry.id}/screenshot?kind=error`, { responseType: "blob" })
+      .then((response) => {
+        if (!active) return;
+        objectUrl = URL.createObjectURL(response.data);
+        setScreenshotUrl(objectUrl);
+        setScreenshotState("ready");
+      })
+      .catch(() => {
+        if (active) setScreenshotState("missing");
+      });
+
+    return () => {
+      active = false;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [entry.id]);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
+      <div className="relative bg-white rounded-xl shadow-2xl w-full max-w-3xl max-h-[86vh] overflow-hidden flex flex-col">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-[#E2E8F0]">
+          <div>
+            <h2 className="text-lg font-semibold text-[#020617]">Acelynk error — {entry.identifier}</h2>
+            <p className="text-xs text-[#64748B] mt-0.5">
+              {entry.importer_account ?? "—"} · attempt #{(entry.retried_count || 0) + 1}
+            </p>
+          </div>
+          <button onClick={onClose} className="text-[#94A3B8] hover:text-[#334155] cursor-pointer">
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+        <div className="overflow-y-auto flex-1 px-6 py-5 space-y-5">
+          <div className="rounded-lg border border-red-100 bg-red-50 px-4 py-3">
+            <p className="text-sm font-semibold text-red-800">{summary.title}</p>
+            <p className="mt-1 text-sm text-red-700">{summary.explanation}</p>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-4">
+            <div className="rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] px-3 py-2.5">
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-[#64748B]">File</p>
+              <p className="mt-1 truncate text-xs font-medium text-[#334155]" title={summary.fileName ?? undefined}>
+                {summary.fileName ?? "Not provided"}
+              </p>
+            </div>
+            <div className="rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] px-3 py-2.5">
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-[#64748B]">Rows</p>
+              <p className="mt-1 text-lg font-semibold tabular-nums text-[#0F172A]">{summary.rowCount ?? "—"}</p>
+            </div>
+            <div className="rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] px-3 py-2.5">
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-[#64748B]">Valid</p>
+              <p className="mt-1 text-lg font-semibold tabular-nums text-emerald-700">{summary.validCount ?? "—"}</p>
+            </div>
+            <div className="rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] px-3 py-2.5">
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-[#64748B]">Errors</p>
+              <p className="mt-1 text-lg font-semibold tabular-nums text-red-700">{summary.errorCount ?? "—"}</p>
+            </div>
+          </div>
+
+          <div>
+            <p className="text-xs font-semibold text-[#334155] uppercase tracking-wider mb-2">How to fix it</p>
+            <ul className="space-y-2">
+              {summary.fixes.map((fix) => (
+                <li key={fix} className="flex gap-2 rounded-lg border border-[#E2E8F0] bg-white px-3 py-2 text-sm text-[#334155]">
+                  <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-[#0369A1]" />
+                  <span>{fix}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          {summary.partErrors.length > 0 && (
+            <div>
+              <p className="text-xs font-semibold text-[#334155] uppercase tracking-wider mb-2">Affected parts</p>
+              <div className="overflow-hidden rounded-lg border border-[#E2E8F0]">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-[#E2E8F0] bg-[#F8FAFC]">
+                      {["Row", "Part", "Tariff", "Country", "Issue"].map((h) => (
+                        <th key={h} className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wider text-[#64748B]">
+                          {h}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[#F1F5F9]">
+                    {summary.partErrors.slice(0, 12).map((partError, index) => (
+                      <tr key={`${partError.excelRow ?? index}-${partError.partNumber ?? index}`}>
+                        <td className="px-3 py-2 text-xs tabular-nums text-[#64748B]">{partError.excelRow ?? "—"}</td>
+                        <td className="px-3 py-2">
+                          <p className="font-medium text-[#0F172A]">{partError.partNumber ?? "—"}</p>
+                          {partError.description && <p className="max-w-[180px] truncate text-xs text-[#64748B]">{partError.description}</p>}
+                        </td>
+                        <td className="px-3 py-2 font-mono text-xs text-[#334155]">{partError.tariff ?? "—"}</td>
+                        <td className="px-3 py-2 text-xs text-[#334155]">{partError.country ?? "—"}</td>
+                        <td className="px-3 py-2 text-xs text-red-700">
+                          {partError.issues.length > 0 ? partError.issues.join("; ") : "Review this row in the source file."}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              {summary.partErrors.length > 12 && (
+                <p className="mt-2 text-xs text-[#64748B]">
+                  Showing 12 of {summary.partErrors.length} affected parts. Export or open the source file to review the rest.
+                </p>
+              )}
+            </div>
+          )}
+
+          {summary.detailLines.length > 0 && (
+            <div>
+              <p className="text-xs font-semibold text-[#334155] uppercase tracking-wider mb-2">Acelynk messages</p>
+              <div className="space-y-2">
+                {summary.detailLines.map((line) => (
+                  <p key={line} className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                    {line}
+                  </p>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div>
+            <p className="text-xs font-semibold text-[#334155] uppercase tracking-wider mb-1.5">Screenshot</p>
+            {screenshotState === "loading" && (
+              <div className="h-48 rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] animate-pulse" />
+            )}
+            {screenshotState === "missing" && (
+              <div className="rounded-lg border border-dashed border-[#CBD5E1] bg-[#F8FAFC] px-3 py-8 text-center text-xs text-[#64748B]">
+                No screenshot is attached to this error.
+              </div>
+            )}
+            {screenshotUrl && (
+              <a href={screenshotUrl} target="_blank" rel="noreferrer" className="block">
+                <img
+                  src={screenshotUrl}
+                  alt={`Acelynk error screenshot for ${entry.identifier}`}
+                  className="w-full rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] object-contain max-h-[420px]"
+                />
+              </a>
+            )}
+          </div>
+
+          {Object.keys(entry.details ?? {}).length > 0 && (
+            <div>
+              <button
+                onClick={() => setShowTechnicalDetails((value) => !value)}
+                className="flex w-full items-center justify-between rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] px-3 py-2 text-left text-xs font-semibold uppercase tracking-wider text-[#334155] hover:bg-white"
+              >
+                Technical details
+                <span className="text-[#64748B]">{showTechnicalDetails ? "Hide" : "Show"}</span>
+              </button>
+              {showTechnicalDetails && (
+                <pre className="mt-2 max-h-72 overflow-auto rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] px-3 py-2.5 text-xs font-mono text-[#334155]">
+                  {JSON.stringify(detailsForDisplay, null, 2)}
+                </pre>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </div>
   );
 }
 
-function TallyInTable({ rows }: { rows: FtzLineItem[] }) {
-  const [expanded, setExpanded] = useState<Set<string>>(new Set());
-
-  // Group rows by HBL
-  const grouped = rows.reduce<Record<string, FtzLineItem[]>>((acc, row) => {
-    const key = row.hbl || "(No HBL)";
-    if (!acc[key]) acc[key] = [];
-    acc[key].push(row);
-    return acc;
-  }, {});
-
-  const hblKeys = Object.keys(grouped).sort();
-
-  function toggleHbl(hbl: string) {
-    setExpanded((prev) => {
-      const next = new Set(prev);
-      if (next.has(hbl)) next.delete(hbl);
-      else next.add(hbl);
-      return next;
-    });
-  }
-
-  if (rows.length === 0) {
-    return (
-      <div className="bg-white border border-[#E2E8F0] rounded-lg px-5 py-12 text-center text-sm text-[#94A3B8]">
-        No new tally in items in this period
-      </div>
-    );
-  }
-
+function ManualModulePlaceholder({ label }: { label: string }) {
   return (
-    <div className="space-y-2">
-      {hblKeys.map((hbl) => {
-        const items = grouped[hbl];
-        const isOpen = expanded.has(hbl);
-        const totalValue = items.reduce((s, r) => s + (r.line_value ?? 0), 0);
-        const totalPieces = items.reduce((s, r) => s + (r.piece_count ?? 0), 0);
-        const pendingCount = items.filter((r) => !r.concurrence).length;
-        const account = items[0]?.importer_account ?? "—";
-
-        return (
-          <div key={hbl} className="bg-white border border-[#E2E8F0] rounded-lg overflow-hidden">
-            {/* HBL header row */}
-            <button
-              onClick={() => toggleHbl(hbl)}
-              className="w-full flex items-center gap-4 px-5 py-3.5 hover:bg-[#F8FAFC] transition-colors cursor-pointer"
-            >
-              <svg
-                className={`w-4 h-4 text-[#94A3B8] shrink-0 transition-transform ${isOpen ? "rotate-90" : ""}`}
-                fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"
-              >
-                <path strokeLinecap="round" strokeLinejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />
-              </svg>
-              <div className="flex items-center gap-3 min-w-0 flex-1">
-                <span className="font-mono text-sm font-semibold text-[#0F172A]">{hbl}</span>
-                <span className="font-mono text-xs text-[#0369A1] font-semibold">{account}</span>
-              </div>
-              <div className="flex items-center gap-4 shrink-0 text-xs">
-                <span className="text-[#64748B]">
-                  <span className="font-semibold text-[#334155]">{items.length}</span> line{items.length !== 1 ? "s" : ""}
-                </span>
-                <span className="text-[#64748B]">
-                  <span className="font-semibold text-[#334155] tabular-nums">{totalPieces.toLocaleString()}</span> pcs
-                </span>
-                <span className="text-[#64748B]">
-                  <span className="font-semibold text-[#334155] tabular-nums">${totalValue.toLocaleString()}</span>
-                </span>
-                {pendingCount > 0 && (
-                  <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-amber-50 text-amber-700">
-                    <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
-                    {pendingCount} pending
-                  </span>
-                )}
-              </div>
-            </button>
-
-            {/* Expanded line items */}
-            {isOpen && (
-              <div className="border-t border-[#E2E8F0]">
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="bg-[#F8FAFC] border-b border-[#E2E8F0]">
-                        {["Part", "Origin", "Qty", "Unit Price", "Line Value", "Weight", "Zone", "Status", "Created"].map((h) => (
-                          <th key={h} className="text-left px-4 py-2.5 text-xs font-semibold text-[#64748B] uppercase tracking-wider whitespace-nowrap">{h}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-[#F1F5F9]">
-                      {items.map((row) => (
-                        <tr key={row.id} className="hover:bg-[#F8FAFC] transition-colors">
-                          <td className="px-4 py-3 font-semibold text-[#0F172A]">{row.part ?? "—"}</td>
-                          <td className="px-4 py-3 text-xs text-[#334155]">{row.country_origin ?? "—"}</td>
-                          <td className="px-4 py-3 tabular-nums text-[#334155] font-medium">{row.piece_count ?? "—"}</td>
-                          <td className="px-4 py-3 tabular-nums text-[#334155]">{row.unit_price != null ? `$${row.unit_price}` : "—"}</td>
-                          <td className="px-4 py-3 tabular-nums text-[#334155] font-medium">{row.line_value != null ? `$${row.line_value.toLocaleString()}` : "—"}</td>
-                          <td className="px-4 py-3 tabular-nums text-[#64748B] text-xs">{row.weight_kg != null ? `${row.weight_kg} kg` : "—"}</td>
-                          <td className="px-4 py-3">
-                            {row.zone_status ? (
-                              <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
-                                row.zone_status === "P" ? "bg-blue-50 text-blue-700" : "bg-purple-50 text-purple-700"
-                              }`}>{row.zone_status === "P" ? "Privileged" : "Foreign"}</span>
-                            ) : "—"}
-                          </td>
-                          <td className="px-4 py-3">
-                            <span className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full ${
-                              row.concurrence ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"
-                            }`}>
-                              <span className={`w-1.5 h-1.5 rounded-full ${row.concurrence ? "bg-emerald-500" : "bg-amber-500"}`} />
-                              {row.concurrence ? "Approved" : "Pending"}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3 text-xs text-[#94A3B8] whitespace-nowrap">
-                            {new Date(row.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            )}
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-function InbondTable({ rows }: { rows: Inbond[] }) {
-  return (
-    <div className="bg-white border border-[#E2E8F0] rounded-lg overflow-hidden">
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-[#E2E8F0] bg-[#F8FAFC]">
-              {["Account", "Container", "Marks", "Part #", "Tariff", "Description", "Qty", "Value", "Weight", "Created"].map((h) => (
-                <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-[#64748B] uppercase tracking-wider whitespace-nowrap">{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-[#F1F5F9]">
-            {rows.length === 0 && (
-              <tr><td colSpan={10} className="px-5 py-12 text-center text-sm text-[#94A3B8]">No new in-bond records in this period</td></tr>
-            )}
-            {rows.map((row) => (
-              <tr key={row.id} className="hover:bg-[#F8FAFC] transition-colors">
-                <td className="px-4 py-3 font-mono text-xs font-semibold text-[#0369A1]">{row.importer_account ?? "—"}</td>
-                <td className="px-4 py-3 font-mono text-xs font-semibold text-[#0F172A]">{row.container ?? "—"}</td>
-                <td className="px-4 py-3 font-mono text-xs text-[#64748B]">{row.marks_numbers ?? "—"}</td>
-                <td className="px-4 py-3 font-semibold text-[#334155]">{row.part_number ?? "—"}</td>
-                <td className="px-4 py-3 font-mono text-xs text-[#64748B]">{row.tariff_number ?? "—"}</td>
-                <td className="px-4 py-3 text-[#475569] max-w-[140px] truncate">{row.description ?? "—"}</td>
-                <td className="px-4 py-3 tabular-nums text-[#334155] font-medium">{row.piece_count ?? "—"}</td>
-                <td className="px-4 py-3 tabular-nums text-[#334155]">{row.value != null ? `$${row.value.toLocaleString()}` : "—"}</td>
-                <td className="px-4 py-3 tabular-nums text-[#64748B] text-xs">{row.weight != null ? `${row.weight} ${row.weight_uom ?? ""}` : "—"}</td>
-                <td className="px-4 py-3 text-xs text-[#94A3B8] whitespace-nowrap">
-                  {new Date(row.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
-}
-
-function TallyOutTable({ rows }: { rows: TallyOut[] }) {
-  return (
-    <div className="bg-white border border-[#E2E8F0] rounded-lg overflow-hidden">
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-[#E2E8F0] bg-[#F8FAFC]">
-              {["Account", "Delivery Order", "Item Code", "Qty", "Unit Price", "Total", "F/D", "Doc Code", "Operator", "Created"].map((h) => (
-                <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-[#64748B] uppercase tracking-wider whitespace-nowrap">{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-[#F1F5F9]">
-            {rows.length === 0 && (
-              <tr><td colSpan={10} className="px-5 py-12 text-center text-sm text-[#94A3B8]">No new tally out items in this period</td></tr>
-            )}
-            {rows.map((row) => (
-              <tr key={row.id} className="hover:bg-[#F8FAFC] transition-colors">
-                <td className="px-4 py-3 font-mono text-xs font-semibold text-[#0369A1]">{row.importer_account ?? "—"}</td>
-                <td className="px-4 py-3 font-mono text-xs font-semibold text-[#0F172A]">{row.delivery_order_no ?? "—"}</td>
-                <td className="px-4 py-3 font-semibold text-[#334155]">{row.item_code ?? "—"}</td>
-                <td className="px-4 py-3 tabular-nums text-[#334155] font-medium">{row.quantity_ordered ?? "—"}</td>
-                <td className="px-4 py-3 tabular-nums text-[#334155]">{row.price_per_unit != null ? `$${row.price_per_unit}` : "—"}</td>
-                <td className="px-4 py-3 tabular-nums text-[#334155] font-medium">
-                  {row.quantity_ordered != null && row.price_per_unit != null
-                    ? `$${(row.quantity_ordered * row.price_per_unit).toLocaleString()}`
-                    : "—"}
-                </td>
-                <td className="px-4 py-3">
-                  {row.foreign_domestic_ind ? (
-                    <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
-                      row.foreign_domestic_ind === "D" ? "bg-blue-50 text-blue-700" : "bg-purple-50 text-purple-700"
-                    }`}>{row.foreign_domestic_ind === "D" ? "Domestic" : "Foreign"}</span>
-                  ) : "—"}
-                </td>
-                <td className="px-4 py-3 font-mono text-xs text-[#64748B]">{row.doc_code_3461_7512 ?? "—"}</td>
-                <td className="px-4 py-3 text-xs text-[#475569]">{row.operator_id ?? "—"}</td>
-                <td className="px-4 py-3 text-xs text-[#94A3B8] whitespace-nowrap">
-                  {new Date(row.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+    <div className="bg-white border border-dashed border-[#CBD5E1] rounded-lg px-6 py-12 text-center">
+      <p className="text-sm font-medium text-[#334155]">No automated Acelynk push for {label} yet.</p>
+      <p className="text-xs text-[#64748B] mt-1">
+        Records still flow into the CRM normally — they just don&apos;t get auto-pushed to Acelynk.
+        Set up an agent + watcher (mirroring the Parts/Tally In pattern) when you&apos;re ready.
+      </p>
     </div>
   );
 }

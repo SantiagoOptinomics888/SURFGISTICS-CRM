@@ -6,7 +6,7 @@ import { PageHeader } from "@/components/ui/page-header";
 import { Skeleton } from "@/components/ui/skeleton";
 import { DataToolbar } from "@/components/ui/data-toolbar";
 import { useDateFilter } from "@/lib/use-date-filter";
-import { exportToCsv } from "@/lib/export";
+import { exportData, type ExportFormat } from "@/lib/export";
 import { CsvUpload } from "@/components/ui/csv-upload";
 import type { Inbond } from "@/lib/types";
 
@@ -21,9 +21,9 @@ export default function InbondsPage() {
   const totalValue = filtered?.reduce((s, r) => s + (r.value ?? 0), 0) ?? 0;
   const containers = new Set(filtered?.map((r) => r.container).filter(Boolean)).size;
 
-  const handleExport = () => {
+  const handleExport = (format: ExportFormat) => {
     if (!filtered) return;
-    exportToCsv("inbonds.csv", filtered, [
+    exportData(format, "inbonds", filtered, [
       { key: "container", label: "Container" },
       { key: "marks_numbers", label: "Marks" },
       { key: "part_number", label: "Part #" },

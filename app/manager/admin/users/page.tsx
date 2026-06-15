@@ -179,7 +179,7 @@ function UserRow({
         <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
           user.role === "manager" ? "bg-purple-50 text-purple-700" : "bg-blue-50 text-blue-700"
         }`}>
-          {user.role}
+          {user.role === "manager" ? "Admin" : "Vendor"}
         </span>
       </td>
       <td className="px-4 py-3 font-mono text-xs text-[#64748B]">{user.importer_account ?? "—"}</td>
@@ -293,7 +293,7 @@ function EditUserForm({
             className="w-full h-9 px-3 rounded-md border border-[#E2E8F0] bg-white text-sm focus:outline-none focus:ring-2 focus:ring-[#0369A1]"
           >
             <option value="vendor">Vendor</option>
-            <option value="manager">Manager</option>
+            <option value="manager">Admin</option>
           </select>
         </div>
         <div>
@@ -347,7 +347,7 @@ function EditUserForm({
             ))}
           </div>
           {role === "manager" && (
-            <p className="text-xs text-[#94A3B8] mt-2">Managers have full access regardless of these checkboxes.</p>
+            <p className="text-xs text-[#94A3B8] mt-2">Admins have full access regardless of these checkboxes.</p>
           )}
         </div>
 
@@ -445,7 +445,7 @@ function CreateUserForm({ onSuccess, onCancel }: { onSuccess: () => void; onCanc
             className="w-full h-9 px-3 rounded-md border border-[#E2E8F0] bg-white text-sm focus:outline-none focus:ring-2 focus:ring-[#0369A1]"
           >
             <option value="vendor">Vendor</option>
-            <option value="manager">Manager</option>
+            <option value="manager">Admin</option>
           </select>
         </div>
         <div>

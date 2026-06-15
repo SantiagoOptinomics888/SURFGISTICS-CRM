@@ -11,29 +11,35 @@ const POLL = 15_000;
 
 export default function VendorDashboard() {
   const user = getAuth();
+  const perms = user?.permissions ?? [];
+  const hasPerm = (p: string) => perms.includes(p);
 
   const { data: arts, isLoading: l1 } = useQuery<ArtsPart[]>({
     queryKey: ["arts_parts"],
-    queryFn: () => api.get("/arts_part").then((r) => r.data),
+    queryFn: () => api.get("/parts").then((r) => r.data),
     refetchInterval: POLL,
+    enabled: hasPerm("parts"),
   });
   const { data: ftz, isLoading: l2 } = useQuery<FtzLineItem[]>({
     queryKey: ["ftz_line_items"],
     queryFn: () => api.get("/ftz_line_item").then((r) => r.data),
     refetchInterval: POLL,
+    enabled: hasPerm("tally_in"),
   });
   const { data: inbonds, isLoading: l3 } = useQuery<Inbond[]>({
     queryKey: ["inbonds"],
     queryFn: () => api.get("/inbond").then((r) => r.data),
     refetchInterval: POLL,
+    enabled: hasPerm("inbond"),
   });
   const { data: tally, isLoading: l4 } = useQuery<TallyOut[]>({
     queryKey: ["tally_outs"],
     queryFn: () => api.get("/tally_out").then((r) => r.data),
     refetchInterval: POLL,
+    enabled: hasPerm("tally_out"),
   });
 
-  const isLoading = l1 || l2 || l3 || l4;
+  const isLoading = (hasPerm("parts") && l1) || (hasPerm("tally_in") && l2) || (hasPerm("inbond") && l3) || (hasPerm("tally_out") && l4);
 
   const totalPartsValue = arts?.reduce((s, r) => s + (r.value ?? 0), 0) ?? 0;
   const ftzApproved = ftz?.filter((r) => r.concurrence === true).length ?? 0;
@@ -51,7 +57,7 @@ export default function VendorDashboard() {
 
   const typeConfig = {
     arts_part: { label: "Parts", color: "bg-blue-50 text-blue-700", href: "/vendor/arts-parts" },
-    ftz:       { label: "Tally In",     color: "bg-purple-50 text-purple-700", href: "/vendor/ftz-line-items" },
+    ftz:       { label: "Tally In",     color: "bg-purple-50 text-purple-700", href: "/vendor/tally-in" },
     inbond:    { label: "In-Bond",      color: "bg-amber-50 text-amber-700", href: "/vendor/inbonds" },
     tally:     { label: "Tally Out",    color: "bg-emerald-50 text-emerald-700", href: "/vendor/tally-out" },
   };
@@ -92,11 +98,11 @@ export default function VendorDashboard() {
       ) : (
         <div className="grid grid-cols-2 gap-4 lg:grid-cols-4 mb-6">
           {[
-            { label: "Parts", value: arts?.length ?? 0, sub: `$${totalPartsValue.toLocaleString()} value`, href: "/vendor/arts-parts" },
-            { label: "Tally In", value: ftz?.length ?? 0, sub: `${ftzApproved} approved · ${ftzPending} pending`, href: "/vendor/ftz-line-items" },
-            { label: "In-Bonds", value: inbonds?.length ?? 0, sub: `${new Set(inbonds?.map((r) => r.container).filter(Boolean)).size} containers`, href: "/vendor/inbonds" },
-            { label: "Tally Out", value: tally?.length ?? 0, sub: `${new Set(tally?.map((r) => r.delivery_order_no).filter(Boolean)).size} delivery orders`, href: "/vendor/tally-out" },
-          ].map(({ label, value, sub, href }) => (
+            hasPerm("parts") && { label: "Parts", value: arts?.length ?? 0, sub: `$${totalPartsValue.toLocaleString()} value`, href: "/vendor/arts-parts" },
+            hasPerm("tally_in") && { label: "Tally In", value: ftz?.length ?? 0, sub: `${ftzApproved} approved · ${ftzPending} pending`, href: "/vendor/tally-in" },
+            hasPerm("inbond") && { label: "In-Bonds", value: inbonds?.length ?? 0, sub: `${new Set(inbonds?.map((r) => r.container).filter(Boolean)).size} containers`, href: "/vendor/inbonds" },
+            hasPerm("tally_out") && { label: "Tally Out", value: tally?.length ?? 0, sub: `${new Set(tally?.map((r) => r.delivery_order_no).filter(Boolean)).size} delivery orders`, href: "/vendor/tally-out" },
+          ].filter((x): x is { label: string; value: number; sub: string; href: string } => !!x).map(({ label, value, sub, href }) => (
             <a key={label} href={href} className="bg-white border border-[#E2E8F0] rounded-lg p-5 hover:border-[#0369A1] hover:shadow-sm transition-fast cursor-pointer group block">
               <div className="flex items-center justify-between mb-2.5">
                 <span className="text-xs font-semibold text-[#64748B] uppercase tracking-wider">{label}</span>
@@ -179,7 +185,12 @@ export default function VendorDashboard() {
               </div>
               <div className="border-t border-[#F1F5F9] pt-3 space-y-1.5">
                 <p className="text-xs font-semibold text-[#334155]">Available endpoints</p>
-                {["/arts_part", "/ftz_line_item", "/inbond", "/tally_out"].map((ep) => (
+                {[
+                  hasPerm("parts") && "/parts",
+                  hasPerm("tally_in") && "/ftz_line_item",
+                  hasPerm("inbond") && "/inbond",
+                  hasPerm("tally_out") && "/tally_out",
+                ].filter((x): x is string => !!x).map((ep) => (
                   <div key={ep} className="flex items-center gap-2">
                     <span className="text-xs bg-[#E0F2FE] text-[#0369A1] font-mono px-1.5 py-0.5 rounded">POST</span>
                     <span className="text-xs font-mono text-[#64748B]">{ep}</span>
@@ -190,7 +201,7 @@ export default function VendorDashboard() {
           </div>
 
           {/* FTZ concurrence summary */}
-          {(ftz ?? []).length > 0 && (
+          {hasPerm("tally_in") && (ftz ?? []).length > 0 && (
             <div>
               <h2 className="text-sm font-semibold text-[#020617] uppercase tracking-wider mb-3">FTZ Status</h2>
               <div className="bg-white border border-[#E2E8F0] rounded-lg p-4">

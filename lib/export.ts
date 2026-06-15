@@ -1,3 +1,7 @@
+import * as XLSX from "xlsx";
+
+export type ExportFormat = "csv" | "xlsx";
+
 /**
  * Export an array of objects to a CSV file and trigger download.
  */
@@ -32,6 +36,50 @@ export function exportToCsv<T>(
   a.download = filename;
   a.click();
   URL.revokeObjectURL(url);
+}
+
+/**
+ * Export an array of objects to an .xlsx file and trigger download.
+ */
+export function exportToXlsx<T>(
+  filename: string,
+  rows: T[],
+  columns: { key: keyof T; label: string }[],
+): void {
+  if (rows.length === 0) return;
+
+  const data = rows.map((row) => {
+    const obj: Record<string, unknown> = {};
+    for (const c of columns) {
+      const val = row[c.key];
+      obj[c.label] = val == null ? "" : val;
+    }
+    return obj;
+  });
+
+  const ws = XLSX.utils.json_to_sheet(data, {
+    header: columns.map((c) => c.label),
+  });
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "Sheet1");
+  XLSX.writeFile(wb, filename);
+}
+
+/**
+ * Export rows in the chosen format, swapping the extension automatically.
+ */
+export function exportData<T>(
+  format: ExportFormat,
+  baseName: string,
+  rows: T[],
+  columns: { key: keyof T; label: string }[],
+): void {
+  const stem = baseName.replace(/\.(csv|xlsx)$/i, "");
+  if (format === "xlsx") {
+    exportToXlsx(`${stem}.xlsx`, rows, columns);
+  } else {
+    exportToCsv(`${stem}.csv`, rows, columns);
+  }
 }
 
 function csvEscape(val: unknown): string {
@@ -112,4 +160,39 @@ export function exportPartsForAcelynk(
   a.download = filename;
   a.click();
   URL.revokeObjectURL(url);
+}
+
+export function exportPartsForAcelynkXlsx(
+  filename: string,
+  rows: Record<string, unknown>[],
+): void {
+  if (rows.length === 0) return;
+
+  const data = rows.map((row) => {
+    const obj: Record<string, unknown> = {};
+    for (const c of ACELYNK_PARTS_COLUMNS) {
+      obj[c.header] = c.key ? (row[c.key] ?? "") : "";
+    }
+    return obj;
+  });
+
+  const ws = XLSX.utils.json_to_sheet(data, {
+    header: ACELYNK_PARTS_COLUMNS.map((c) => c.header),
+  });
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "Parts");
+  XLSX.writeFile(wb, filename);
+}
+
+export function exportPartsForAcelynkData(
+  format: ExportFormat,
+  baseName: string,
+  rows: Record<string, unknown>[],
+): void {
+  const stem = baseName.replace(/\.(csv|xlsx)$/i, "");
+  if (format === "xlsx") {
+    exportPartsForAcelynkXlsx(`${stem}.xlsx`, rows);
+  } else {
+    exportPartsForAcelynk(`${stem}.csv`, rows);
+  }
 }

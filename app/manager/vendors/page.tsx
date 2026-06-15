@@ -95,7 +95,7 @@ export default function VendorsPage() {
                     </span>
                   </div>
                   {/* Counts */}
-                  <div className="col-span-1 text-sm text-[#334155] tabular-nums">{v.record_counts.arts_parts}</div>
+                  <div className="col-span-1 text-sm text-[#334155] tabular-nums">{v.record_counts.parts}</div>
                   <div className="col-span-1 text-sm text-[#334155] tabular-nums">{v.record_counts.ftz_line_items}</div>
                   <div className="col-span-1 text-sm text-[#334155] tabular-nums">{v.record_counts.inbonds}</div>
                   <div className="col-span-1 text-sm text-[#334155] tabular-nums">{v.record_counts.tally_outs}</div>

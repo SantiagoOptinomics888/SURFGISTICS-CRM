@@ -7,7 +7,7 @@ import { PageHeader } from "@/components/ui/page-header";
 import { Skeleton } from "@/components/ui/skeleton";
 import { DataToolbar } from "@/components/ui/data-toolbar";
 import { useDateFilter } from "@/lib/use-date-filter";
-import { exportToCsv } from "@/lib/export";
+import { exportData, type ExportFormat } from "@/lib/export";
 import { CsvUpload } from "@/components/ui/csv-upload";
 import type { HblGroup, FtzLineItem } from "@/lib/types";
 
@@ -46,9 +46,9 @@ export default function FtzLineItemsPage() {
         .sort((a, b) => a.hbl.localeCompare(b.hbl))
     : null;
 
-  const handleExport = () => {
+  const handleExport = (format: ExportFormat) => {
     if (!filtered) return;
-    exportToCsv("ftz_line_items.csv", filtered, [
+    exportData(format, "ftz_line_items", filtered, [
       { key: "hbl", label: "HBL" },
       { key: "country_origin", label: "Country_Origin" },
       { key: "part", label: "Part" },

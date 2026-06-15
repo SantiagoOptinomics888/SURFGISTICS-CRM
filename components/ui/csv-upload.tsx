@@ -1,19 +1,27 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import * as XLSX from "xlsx";
 import { api } from "@/lib/api";
 
 const TEMPLATE_HEADERS: Record<string, string[]> = {
-  arts_part: ["ImporterAccount", "PartNumber", "Description", "Country", "Tariff #", "CountryOfOrigin"],
+  parts: ["PartNumber", "Description", "Country", "Tariff #", "CountryOfOrigin"],
   ftz_line_item: ["Country_Origin", "Part", "Piece_Count", "Unit_Price", "Line_Value", "Weight_KG", "HTS_QTY_1", "HTS_QTY_2", "Line_Charge", "Reference_Qualifier", "Reference_ID", "Zone_Status", "SPI", "SPI_Country", "SPI_Secondary", "Lot_Number", "Remarks"],
   inbond: ["container", "part_number", "tariff_number", "description", "piece_count", "value", "weight", "weight_uom", "marks_numbers", "manifest_uom"],
   tally_out: ["Delivery Order #", "Item Code", "Quantity Ordered", "Price Per Unit", "Foreign/Domestic Ind.", "3461-7512", "Operator ID", "Internal Order"],
 };
 
-function downloadTemplate(resourceType: string) {
+function downloadTemplate(resourceType: string, format: "csv" | "xlsx" = "csv") {
   const headers = TEMPLATE_HEADERS[resourceType];
   if (!headers) return;
+  if (format === "xlsx") {
+    const ws = XLSX.utils.aoa_to_sheet([headers]);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Template");
+    XLSX.writeFile(wb, `${resourceType}_template.xlsx`);
+    return;
+  }
   const csv = headers.join(",") + "\n";
   const blob = new Blob([csv], { type: "text/csv" });
   const url = URL.createObjectURL(blob);
@@ -24,9 +32,58 @@ function downloadTemplate(resourceType: string) {
   URL.revokeObjectURL(url);
 }
 
+function TemplateMenu({ resourceType }: { resourceType: string }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handler(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    if (open) document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md border border-[#E2E8F0] bg-white text-[#334155] hover:bg-[#F8FAFC] transition-colors cursor-pointer"
+      >
+        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3" />
+        </svg>
+        Template
+        <svg className={`w-3 h-3 transition-transform ${open ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5" />
+        </svg>
+      </button>
+      {open && (
+        <div className="absolute left-0 mt-1 z-10 min-w-[140px] bg-white border border-[#E2E8F0] rounded-md shadow-lg overflow-hidden">
+          <button
+            onClick={() => { downloadTemplate(resourceType, "csv"); setOpen(false); }}
+            className="w-full text-left px-3 py-2 text-xs font-medium text-[#334155] hover:bg-[#F8FAFC] transition-colors cursor-pointer"
+          >
+            CSV Template
+          </button>
+          <button
+            onClick={() => { downloadTemplate(resourceType, "xlsx"); setOpen(false); }}
+            className="w-full text-left px-3 py-2 text-xs font-medium text-[#334155] hover:bg-[#F8FAFC] transition-colors cursor-pointer border-t border-[#F1F5F9]"
+          >
+            Excel Template
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 interface UploadResult {
   created: number;
   errors: string[];
+  message?: string;
+  missingParts?: string[];
+  missingPartRows?: Record<string, number[]>;
 }
 
 interface CsvUploadProps {
@@ -68,12 +125,19 @@ export function CsvUpload({ resourceType, label, invalidateKeys }: CsvUploadProp
     },
     onError: (err: unknown) => {
       const resp = err && typeof err === "object" && "response" in err
-        ? (err as { response?: { data?: { detail?: string | { message?: string; errors?: string[] } } } }).response?.data?.detail
+        ? (err as { response?: { data?: { detail?: string | { message?: string; errors?: string[]; missing_parts?: string[]; missing_part_rows?: Record<string, number[]> } } } }).response?.data?.detail
         : undefined;
       if (typeof resp === "string") {
         setResult({ created: 0, errors: [resp] });
-      } else if (resp && typeof resp === "object" && "errors" in resp) {
-        setResult({ created: 0, errors: (resp as { errors: string[] }).errors });
+      } else if (resp && typeof resp === "object") {
+        const r = resp as { message?: string; errors?: string[]; missing_parts?: string[]; missing_part_rows?: Record<string, number[]> };
+        setResult({
+          created: 0,
+          errors: r.errors ?? [],
+          message: r.message,
+          missingParts: r.missing_parts,
+          missingPartRows: r.missing_part_rows,
+        });
       } else {
         setResult({ created: 0, errors: ["Upload failed. Check your file format."] });
       }
@@ -103,15 +167,7 @@ export function CsvUpload({ resourceType, label, invalidateKeys }: CsvUploadProp
           </svg>
           Upload {label}
         </button>
-        <button
-          onClick={() => downloadTemplate(resourceType)}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md border border-[#E2E8F0] bg-white text-[#334155] hover:bg-[#F8FAFC] transition-colors cursor-pointer"
-        >
-          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3" />
-          </svg>
-          CSV Template
-        </button>
+        <TemplateMenu resourceType={resourceType} />
       </div>
     );
   }
@@ -200,15 +256,9 @@ export function CsvUpload({ resourceType, label, invalidateKeys }: CsvUploadProp
           >
             Clear
           </button>
-          <button
-            onClick={() => downloadTemplate(resourceType)}
-            className="ml-auto inline-flex items-center gap-1.5 text-xs text-[#0369A1] hover:underline cursor-pointer"
-          >
-            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3" />
-            </svg>
-            Download Template
-          </button>
+          <div className="ml-auto">
+            <TemplateMenu resourceType={resourceType} />
+          </div>
         </div>
       )}
 
@@ -223,10 +273,57 @@ export function CsvUpload({ resourceType, label, invalidateKeys }: CsvUploadProp
               Successfully imported {result.created} record{result.created !== 1 ? "s" : ""}.
             </div>
           )}
-          {result.errors.length > 0 && (
+          {result.missingParts && result.missingParts.length > 0 && (
+            <div className="px-3 py-3 rounded-lg bg-amber-50 border border-amber-200">
+              <div className="flex items-start gap-2">
+                <svg className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" />
+                </svg>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-amber-800">
+                    {result.message ?? `${result.missingParts.length} part number(s) not in your parts list`}
+                  </p>
+                  <p className="text-xs text-amber-700 mt-1">
+                    Add these part numbers to your Parts list, then re-upload:
+                  </p>
+                  <div className="mt-2 bg-white border border-amber-200 rounded-md divide-y divide-amber-100 overflow-hidden">
+                    {result.missingParts.slice(0, 50).map((p) => {
+                      const rows = result.missingPartRows?.[p] ?? [];
+                      return (
+                        <div key={p} className="flex items-center gap-3 px-2.5 py-1.5 text-xs">
+                          <span className="font-mono font-semibold text-amber-900 flex-1 min-w-0 truncate">{p}</span>
+                          {rows.length > 0 && (
+                            <span className="text-[11px] text-amber-700 whitespace-nowrap">
+                              row{rows.length !== 1 ? "s" : ""} {rows.slice(0, 5).join(", ")}
+                              {rows.length > 5 && ` +${rows.length - 5}`}
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })}
+                    {result.missingParts.length > 50 && (
+                      <div className="px-2.5 py-1.5 text-[11px] text-amber-700 font-medium">
+                        …and {result.missingParts.length - 50} more
+                      </div>
+                    )}
+                  </div>
+                  <a
+                    href="/vendor/arts-parts"
+                    className="inline-flex items-center gap-1 text-xs font-semibold text-amber-800 hover:text-amber-900 mt-2 cursor-pointer"
+                  >
+                    Go to Parts
+                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />
+                    </svg>
+                  </a>
+                </div>
+              </div>
+            </div>
+          )}
+          {result.errors.length > 0 && !result.missingParts?.length && (
             <div className="px-3 py-2.5 rounded-lg bg-red-50 border border-red-100">
               <p className="text-sm font-medium text-red-700 mb-1.5">
-                {result.created > 0 ? `${result.errors.length} row(s) had issues:` : "Upload failed:"}
+                {result.message ?? (result.created > 0 ? `${result.errors.length} row(s) had issues:` : "Upload failed:")}
               </p>
               <ul className="space-y-0.5">
                 {result.errors.slice(0, 20).map((err, i) => (
