@@ -47,14 +47,14 @@ function formatRelative(iso: string): string {
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
 
-function redactScreenshotData(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(redactScreenshotData);
+function redactEmbeddedData(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(redactEmbeddedData);
   if (!value || typeof value !== "object") return value;
 
   return Object.fromEntries(
     Object.entries(value as Record<string, unknown>).map(([key, item]) => [
       key,
-      key === "data_base64" && typeof item === "string" ? `[base64 image data, ${item.length} chars]` : redactScreenshotData(item),
+      key === "data_base64" && typeof item === "string" ? `[embedded file data, ${item.length} chars]` : redactEmbeddedData(item),
     ])
   );
 }
@@ -334,9 +334,10 @@ function ModuleStatusTable({ resourceType }: { resourceType: ModuleKey }) {
 function ErrorPreviewModal({ entry, onClose }: { entry: AcelynkLogEntry; onClose: () => void }) {
   const [screenshotUrl, setScreenshotUrl] = useState<string | null>(null);
   const [screenshotState, setScreenshotState] = useState<"loading" | "ready" | "missing">("loading");
+  const [downloadState, setDownloadState] = useState<"idle" | "downloading" | "missing">("idle");
   const [showTechnicalDetails, setShowTechnicalDetails] = useState(false);
   const summary = friendlyErrorSummary(entry);
-  const detailsForDisplay = redactScreenshotData(entry.details ?? {});
+  const detailsForDisplay = redactEmbeddedData(entry.details ?? {});
 
   useEffect(() => {
     let active = true;
@@ -362,6 +363,26 @@ function ErrorPreviewModal({ entry, onClose }: { entry: AcelynkLogEntry; onClose
     };
   }, [entry.id]);
 
+  function downloadUploadFile() {
+    setDownloadState("downloading");
+    api
+      .get(`/manager/acelynk-log/${entry.id}/file`, { responseType: "blob" })
+      .then((response) => {
+        const objectUrl = URL.createObjectURL(response.data);
+        const link = document.createElement("a");
+        link.href = objectUrl;
+        link.download = summary.fileName ?? `acelynk_upload_${entry.id}.xlsx`;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        URL.revokeObjectURL(objectUrl);
+        setDownloadState("idle");
+      })
+      .catch(() => {
+        setDownloadState("missing");
+      });
+  }
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-black/40" onClick={onClose} />
@@ -383,6 +404,30 @@ function ErrorPreviewModal({ entry, onClose }: { entry: AcelynkLogEntry; onClose
           <div className="rounded-lg border border-red-100 bg-red-50 px-4 py-3">
             <p className="text-sm font-semibold text-red-800">{summary.title}</p>
             <p className="mt-1 text-sm text-red-700">{summary.explanation}</p>
+          </div>
+
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-[#E2E8F0] bg-white px-4 py-3">
+            <div>
+              <p className="text-sm font-semibold text-[#0F172A]">Need to correct the upload?</p>
+              <p className="mt-0.5 text-xs text-[#64748B]">
+                Download the exact file sent to Acelynk, edit it, then reupload or reprocess after fixing the source data.
+              </p>
+              {downloadState === "missing" && (
+                <p className="mt-1 text-xs font-medium text-amber-700">
+                  This older log does not have a downloadable file attached.
+                </p>
+              )}
+            </div>
+            <button
+              onClick={downloadUploadFile}
+              disabled={downloadState === "downloading"}
+              className="inline-flex items-center gap-2 rounded-md bg-[#0369A1] px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-[#0284C7] disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3" />
+              </svg>
+              {downloadState === "downloading" ? "Preparing..." : "Download upload file"}
+            </button>
           </div>
 
           <div className="grid gap-3 sm:grid-cols-4">
