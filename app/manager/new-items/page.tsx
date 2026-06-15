@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useSearchParams } from "next/navigation";
 import { api } from "@/lib/api";
 import { PageHeader } from "@/components/ui/page-header";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -15,6 +16,12 @@ const MODULES: { key: ModuleKey; label: string; automated: boolean }[] = [
   { key: "inbond", label: "In-Bonds", automated: false },
   { key: "tally_out", label: "Tally Out", automated: false },
 ];
+
+const MODULE_KEYS = new Set<ModuleKey>(MODULES.map((module) => module.key));
+
+function moduleFromParam(value: string | null): ModuleKey {
+  return value && MODULE_KEYS.has(value as ModuleKey) ? (value as ModuleKey) : "parts";
+}
 
 const STATUS_STYLES: Record<string, string> = {
   pending: "bg-amber-50 text-amber-700 border-amber-200",
@@ -165,8 +172,14 @@ function friendlyErrorSummary(entry: AcelynkLogEntry) {
 }
 
 export default function ModulesPage() {
-  const [activeTab, setActiveTab] = useState<ModuleKey>("parts");
+  const searchParams = useSearchParams();
+  const requestedModule = moduleFromParam(searchParams.get("module"));
+  const [activeTab, setActiveTab] = useState<ModuleKey>(requestedModule);
   const activeModule = MODULES.find((m) => m.key === activeTab)!;
+
+  useEffect(() => {
+    setActiveTab(requestedModule);
+  }, [requestedModule]);
 
   return (
     <div>

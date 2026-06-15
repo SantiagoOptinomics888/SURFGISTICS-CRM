@@ -25,28 +25,28 @@ import type { AcelynkLogEntry, ManagerStats, RecentActivityItem } from "@/lib/ty
 const moduleMeta = {
   parts: {
     label: "Parts",
-    href: "/manager/new-items",
+    href: "/manager/new-items?module=parts",
     color: "text-sky-700",
     bg: "bg-sky-50",
     icon: Package,
   },
   tallyIn: {
     label: "Tally In",
-    href: "/manager/new-items",
+    href: "/manager/new-items?module=ftz_line_item",
     color: "text-amber-700",
     bg: "bg-amber-50",
     icon: ClipboardList,
   },
   inbond: {
     label: "In-Bonds",
-    href: "/manager/new-items",
+    href: "/manager/new-items?module=inbond",
     color: "text-violet-700",
     bg: "bg-violet-50",
     icon: Ship,
   },
   tallyOut: {
     label: "Tally Outs",
-    href: "/manager/new-items",
+    href: "/manager/new-items?module=tally_out",
     color: "text-emerald-700",
     bg: "bg-emerald-50",
     icon: FileCheck2,
