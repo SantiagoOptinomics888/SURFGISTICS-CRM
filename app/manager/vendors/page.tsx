@@ -59,7 +59,7 @@ export default function VendorsPage() {
         <div className="bg-white border border-[#E2E8F0] rounded-lg overflow-hidden">
           {/* Table header */}
           <div className="border-b border-[#E2E8F0] px-5 py-3 grid grid-cols-12 gap-4">
-            {["Vendor", "Account", "Status", "Arts", "FTZ", "In-Bond", "Tally", "Last Updated", ""].map((h, i) => (
+            {["Vendor", "Account", "Status", "Parts", "Tally In", "In-Bond", "Tally Out", "Last Updated", ""].map((h, i) => (
               <div key={i} className={`text-xs font-semibold text-[#64748B] uppercase tracking-wider ${
                 i === 0 ? "col-span-2" : i === 1 ? "col-span-2" : i === 7 ? "col-span-2" : i === 8 ? "col-span-1 text-right" : "col-span-1"
               }`}>
