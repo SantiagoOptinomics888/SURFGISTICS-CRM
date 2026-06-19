@@ -141,7 +141,7 @@ export interface NewItemsResponse {
   tally_outs: TallyOut[];
 }
 
-export type AcelynkResource = "parts" | "ftz_line_item" | "inbond" | "tally_out";
+export type AcelynkResource = "parts" | "ftz_line_item" | "inbond" | "tally_out" | "e214_entry_header";
 export type AcelynkStatus = "pending" | "success" | "failed";
 
 export interface AcelynkLogEntry {

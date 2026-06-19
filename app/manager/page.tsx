@@ -64,6 +64,7 @@ const activityTypeLabels: Record<string, { label: string; color: string }> = {
 const resourceLabels: Record<string, string> = {
   parts: "Parts",
   ftz_line_item: "Tally In",
+  e214_entry_header: "E214 Entry Header",
   inbond: "In-Bond",
   tally_out: "Tally Out",
 };
