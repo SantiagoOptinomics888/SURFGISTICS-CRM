@@ -13,6 +13,7 @@ type ModuleKey = AcelynkResource;
 const MODULES: { key: ModuleKey; label: string; automated: boolean }[] = [
   { key: "parts", label: "Parts", automated: true },
   { key: "ftz_line_item", label: "Tally In", automated: true },
+  { key: "e214_entry_header", label: "E214 Entry Header", automated: true },
   { key: "inbond", label: "In-Bonds", automated: false },
   { key: "tally_out", label: "Tally Out", automated: false },
 ];
@@ -141,6 +142,7 @@ function friendlyFixes(entry: AcelynkLogEntry, details: Record<string, unknown>,
 
 function friendlyErrorSummary(entry: AcelynkLogEntry) {
   const details = asRecord(entry.details);
+  const extractedPayload = asRecord(details.extracted_payload);
   const confirmSummary = asRecord(details.confirm_summary);
   const uploadSummary = asRecord(details.upload_summary);
   const partErrors = partErrorsFromDetails(details);
@@ -167,6 +169,7 @@ function friendlyErrorSummary(entry: AcelynkLogEntry) {
     errorCount,
     partErrors,
     detailLines,
+    extractedPayload,
     fixes: friendlyFixes(entry, details, partErrors),
   };
 }
@@ -423,7 +426,7 @@ function ErrorPreviewModal({ entry, onClose }: { entry: AcelynkLogEntry; onClose
             <div>
               <p className="text-sm font-semibold text-[#0F172A]">Need to correct the upload?</p>
               <p className="mt-0.5 text-xs text-[#64748B]">
-                Download the exact file sent to Acelynk, edit it, then reupload or reprocess after fixing the source data.
+                Download the source file, correct it, then reupload or reprocess after fixing the source data.
               </p>
               {downloadState === "missing" && (
                 <p className="mt-1 text-xs font-medium text-amber-700">
@@ -443,6 +446,31 @@ function ErrorPreviewModal({ entry, onClose }: { entry: AcelynkLogEntry; onClose
             </button>
           </div>
 
+          {Object.keys(summary.extractedPayload).length > 0 && (
+            <div className="rounded-lg border border-[#E2E8F0] bg-white p-4">
+              <p className="text-xs font-semibold text-[#334155] uppercase tracking-wider mb-3">Extracted arrival notice fields</p>
+              <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {([
+                  ["HBL", summary.extractedPayload.hbl],
+                  ["Arrival date", summary.extractedPayload.arrival_date],
+                  ["Unlading date", summary.extractedPayload.unlading_date],
+                  ["Carrier", summary.extractedPayload.carrier_id],
+                  ["Voyage", summary.extractedPayload.voyage_flight],
+                  ["Port code", summary.extractedPayload.port_code],
+                  ["FIRMS", summary.extractedPayload.firms],
+                  ["Container", summary.extractedPayload.container_number],
+                  ["Gross weight", summary.extractedPayload.gross_weight],
+                ] as [string, unknown][]).map(([label, value]) => (
+                  <div key={label} className="min-w-0">
+                    <dt className="text-xs font-medium text-[#64748B]">{label}</dt>
+                    <dd className="mt-1 truncate text-sm text-[#0F172A]">{value ? String(value) : "Not found"}</dd>
+                  </div>
+                ))}
+              </dl>
+            </div>
+          )}
+
+          {entry.resource_type !== "e214_entry_header" && (
           <div className="grid gap-3 sm:grid-cols-4">
             <div className="rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] px-3 py-2.5">
               <p className="text-[11px] font-semibold uppercase tracking-wider text-[#64748B]">File</p>
@@ -463,6 +491,7 @@ function ErrorPreviewModal({ entry, onClose }: { entry: AcelynkLogEntry; onClose
               <p className="mt-1 text-lg font-semibold tabular-nums text-red-700">{summary.errorCount ?? "—"}</p>
             </div>
           </div>
+          )}
 
           <div>
             <p className="text-xs font-semibold text-[#334155] uppercase tracking-wider mb-2">How to fix it</p>

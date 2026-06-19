@@ -9,6 +9,7 @@ import { PageHeader } from "@/components/ui/page-header";
 const ALL_RESOURCE_TYPES = [
   { value: "parts", label: "Parts", permission: "parts" },
   { value: "ftz_line_item", label: "Tally In", permission: "tally_in" },
+  { value: "e214_entry_header", label: "E214 Entry Header", permission: "tally_in" },
   { value: "inbond", label: "In-Bond", permission: "inbond" },
   { value: "tally_out", label: "Tally Out", permission: "tally_out" },
 ] as const;
@@ -36,6 +37,12 @@ function downloadTemplate(resourceType: string) {
 interface UploadResult {
   created: number;
   errors: string[];
+  message?: string;
+  logId?: number;
+  identifier?: string;
+  importerAccount?: string | null;
+  extracted?: Record<string, unknown>;
+  missingFields?: string[];
 }
 
 export default function UploadPage() {
@@ -51,13 +58,35 @@ export default function UploadPage() {
   const inputRef = useRef<HTMLInputElement>(null);
 
   const isTallyIn = resourceType === "ftz_line_item";
+  const isE214 = resourceType === "e214_entry_header";
   const hblValid = !isTallyIn || hbl.trim().length > 0;
+  const acceptedExtensions = isE214 ? ".pdf,.txt,.csv,.xlsx" : ".csv,.xlsx";
 
   const mutation = useMutation({
     mutationFn: async () => {
       if (!file) throw new Error("No file selected");
       const form = new FormData();
       form.append("file", file);
+      if (isE214) {
+        const res = await api.post("/upload/arrival-notice/e214", form, {
+          headers: { "Content-Type": "multipart/form-data" },
+        });
+        const missingFields = res.data.missing_fields ?? [];
+        return {
+          created: missingFields.length > 0 ? 0 : 1,
+          errors: missingFields.length > 0
+            ? [`Arrival notice is missing required fields: ${missingFields.join(", ")}`]
+            : [],
+          message: missingFields.length > 0
+            ? "Arrival notice was saved, but it needs correction before Acelynk can run."
+            : "Arrival notice received. The E214 Entry Header job is queued for Acelynk.",
+          logId: res.data.log_id,
+          identifier: res.data.identifier,
+          importerAccount: res.data.importer_account,
+          extracted: res.data.extracted,
+          missingFields,
+        } as UploadResult;
+      }
       const params = isTallyIn ? `?hbl=${encodeURIComponent(hbl.trim())}` : "";
       const res = await api.post(`/upload/${resourceType}${params}`, form, {
         headers: { "Content-Type": "multipart/form-data" },
@@ -85,8 +114,9 @@ export default function UploadPage() {
   function handleFile(f: File | undefined) {
     if (!f) return;
     const ext = f.name.split(".").pop()?.toLowerCase();
-    if (ext !== "csv" && ext !== "xlsx") {
-      setResult({ created: 0, errors: ["File must be .csv or .xlsx"] });
+    const allowed = isE214 ? ["pdf", "txt", "csv", "xlsx"] : ["csv", "xlsx"];
+    if (!ext || !allowed.includes(ext)) {
+      setResult({ created: 0, errors: [`File must be ${isE214 ? ".pdf, .txt, .csv, or .xlsx" : ".csv or .xlsx"}`] });
       return;
     }
     setFile(f);
@@ -95,7 +125,7 @@ export default function UploadPage() {
 
   return (
     <div>
-      <PageHeader title="Data Upload" subtitle="Import records from CSV or Excel files" />
+      <PageHeader title="Data Upload" subtitle="Import records and queue Acelynk automation from upload files" />
 
       {/* Resource type selector */}
       <div className="mb-6">
@@ -117,19 +147,27 @@ export default function UploadPage() {
         </div>
       </div>
 
-      {/* Template download */}
-      <div className="mb-6 flex items-center gap-3">
-        <button
-          onClick={() => downloadTemplate(resourceType)}
-          className="inline-flex items-center gap-2 px-3 py-1.5 rounded-md border border-[#E2E8F0] text-sm font-medium text-[#0369A1] hover:bg-[#F0F9FF] transition-colors cursor-pointer"
-        >
-          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3" />
-          </svg>
-          Download CSV Template
-        </button>
-        <span className="text-xs text-[#94A3B8]">Use this template to ensure correct column headers</span>
-      </div>
+      {!isE214 ? (
+        <div className="mb-6 flex items-center gap-3">
+          <button
+            onClick={() => downloadTemplate(resourceType)}
+            className="inline-flex items-center gap-2 px-3 py-1.5 rounded-md border border-[#E2E8F0] text-sm font-medium text-[#0369A1] hover:bg-[#F0F9FF] transition-colors cursor-pointer"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3" />
+            </svg>
+            Download CSV Template
+          </button>
+          <span className="text-xs text-[#94A3B8]">Use this template to ensure correct column headers</span>
+        </div>
+      ) : (
+        <div className="mb-6 rounded-lg border border-[#E2E8F0] bg-white px-4 py-3">
+          <p className="text-sm font-semibold text-[#0F172A]">Upload an arrival notice</p>
+          <p className="mt-1 text-sm text-[#64748B]">
+            The CRM will extract the E214 Entry Header details and queue the Acelynk automation.
+          </p>
+        </div>
+      )}
 
       {/* HBL input for Tally In */}
       {isTallyIn && (
@@ -163,7 +201,7 @@ export default function UploadPage() {
           <input
             ref={inputRef}
             type="file"
-            accept=".csv,.xlsx"
+            accept={acceptedExtensions}
             onChange={(e) => handleFile(e.target.files?.[0])}
             className="hidden"
           />
@@ -181,7 +219,9 @@ export default function UploadPage() {
                 <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5" />
               </svg>
               <p className="text-sm font-medium text-[#334155]">Drop your file here or click to browse</p>
-              <p className="text-xs text-[#94A3B8] mt-1">Supports .csv and .xlsx (max 10MB)</p>
+              <p className="text-xs text-[#94A3B8] mt-1">
+                Supports {isE214 ? ".pdf, .txt, .csv, and .xlsx arrival notices" : ".csv and .xlsx"} ({isE214 ? "max 15MB" : "max 10MB"})
+              </p>
             </div>
           )}
         </div>
@@ -195,7 +235,7 @@ export default function UploadPage() {
             disabled={mutation.isPending || !hblValid}
             className="px-5 py-2.5 rounded-md bg-[#0369A1] hover:bg-[#0284C7] text-white text-sm font-semibold transition-colors cursor-pointer disabled:opacity-50"
           >
-            {mutation.isPending ? "Uploading..." : `Upload to ${RESOURCE_TYPES.find((r) => r.value === resourceType)?.label}`}
+            {mutation.isPending ? "Uploading..." : isE214 ? "Queue E214 Entry Header" : `Upload to ${RESOURCE_TYPES.find((r) => r.value === resourceType)?.label}`}
           </button>
           <button
             onClick={() => { setFile(null); setResult(null); }}
@@ -214,7 +254,33 @@ export default function UploadPage() {
               <svg className="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
               </svg>
-              Successfully imported {result.created} record{result.created !== 1 ? "s" : ""}.
+              {result.message ?? `Successfully imported ${result.created} record${result.created !== 1 ? "s" : ""}.`}
+            </div>
+          )}
+          {result.extracted && (
+            <div className="rounded-lg border border-[#E2E8F0] bg-white p-4">
+              <p className="text-sm font-semibold text-[#0F172A]">Extracted E214 details</p>
+              <dl className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {([
+                  ["HBL", result.identifier],
+                  ["Account", result.importerAccount],
+                  ["Arrival date", result.extracted.arrival_date],
+                  ["Carrier", result.extracted.carrier_id],
+                  ["Voyage", result.extracted.voyage_flight],
+                  ["FIRMS", result.extracted.firms],
+                  ["Port code", result.extracted.port_code],
+                  ["Container", result.extracted.container_number],
+                  ["Gross weight", result.extracted.gross_weight],
+                ] as [string, unknown][]).map(([label, value]) => (
+                  <div key={label} className="min-w-0">
+                    <dt className="text-xs font-medium text-[#64748B]">{label}</dt>
+                    <dd className="mt-1 truncate text-sm text-[#0F172A]">{value ? String(value) : "Not found"}</dd>
+                  </div>
+                ))}
+              </dl>
+              {result.logId && (
+                <p className="mt-3 text-xs text-[#64748B]">Acelynk log #{result.logId}</p>
+              )}
             </div>
           )}
           {result.errors.length > 0 && (
