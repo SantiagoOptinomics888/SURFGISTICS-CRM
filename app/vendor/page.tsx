@@ -161,6 +161,30 @@ export default function VendorDashboard() {
 
         {/* Right column — FTZ status + connection info */}
         <div className="lg:col-span-2 space-y-4">
+          {hasPerm("tally_in") && (
+            <div>
+              <h2 className="text-sm font-semibold text-[#020617] uppercase tracking-wider mb-3">Arrival Notice</h2>
+              <a
+                href="/vendor/arrival-notice"
+                className="block rounded-lg border border-[#E2E8F0] bg-white p-4 transition-fast hover:border-[#0369A1] hover:shadow-sm"
+              >
+                <div className="flex items-start gap-3">
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-[#E0F2FE] text-[#0369A1]">
+                    <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5A3.375 3.375 0 0 0 10.125 2.25H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
+                    </svg>
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-[#0F172A]">Upload arrival notice</p>
+                    <p className="mt-1 text-xs leading-relaxed text-[#64748B]">
+                      Queue E214 Entry Header extraction and Acelynk automation from the arrival notice file.
+                    </p>
+                  </div>
+                </div>
+              </a>
+            </div>
+          )}
+
           {/* API Connection box */}
           <div>
             <h2 className="text-sm font-semibold text-[#020617] uppercase tracking-wider mb-3">API Connection</h2>
