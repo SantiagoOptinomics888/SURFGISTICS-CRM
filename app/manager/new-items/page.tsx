@@ -71,6 +71,16 @@ function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
 }
 
+function hasScreenshotReference(details: Record<string, unknown>, kind: "error" | "result"): boolean {
+  const keys = kind === "result" ? ["screenshot", "screenshot_path"] : ["error_screenshot", "error_screenshot_path", "screenshot"];
+  return keys.some((key) => {
+    const value = details[key];
+    if (typeof value === "string" && value.trim()) return true;
+    if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+    return typeof (value as Record<string, unknown>).data_base64 === "string";
+  });
+}
+
 function asString(value: unknown): string | null {
   return typeof value === "string" && value.trim() ? value : null;
 }
@@ -322,9 +332,13 @@ function ModuleStatusTable({ resourceType }: { resourceType: ModuleKey }) {
                       {row.status === "success" && (
                         <button
                           onClick={() => setPreview({ entry: row, kind: "result" })}
-                          className="text-xs font-medium px-2.5 py-1 rounded border border-emerald-200 text-emerald-700 hover:bg-emerald-50 transition-colors cursor-pointer"
+                          className={`text-xs font-medium px-2.5 py-1 rounded border transition-colors cursor-pointer ${
+                            hasScreenshotReference(asRecord(row.details), "result")
+                              ? "border-emerald-200 text-emerald-700 hover:bg-emerald-50"
+                              : "border-amber-200 text-amber-700 hover:bg-amber-50"
+                          }`}
                         >
-                          View result
+                          {hasScreenshotReference(asRecord(row.details), "result") ? "View result" : "View details"}
                         </button>
                       )}
                       {row.status === "failed" && (
@@ -368,6 +382,7 @@ function JobPreviewModal({ entry, kind, onClose }: { entry: AcelynkLogEntry; kin
   const summary = friendlyErrorSummary(entry);
   const detailsForDisplay = redactEmbeddedData(entry.details ?? {});
   const isResult = kind === "result";
+  const resultNeedsVerification = isResult && screenshotState === "missing";
 
   useEffect(() => {
     let active = true;
@@ -432,15 +447,27 @@ function JobPreviewModal({ entry, kind, onClose }: { entry: AcelynkLogEntry; kin
         </div>
         <div className="overflow-y-auto flex-1 px-6 py-5 space-y-5">
           <div className={`rounded-lg border px-4 py-3 ${
-            isResult ? "border-emerald-100 bg-emerald-50" : "border-red-100 bg-red-50"
+            resultNeedsVerification
+              ? "border-amber-200 bg-amber-50"
+              : isResult
+                ? "border-emerald-100 bg-emerald-50"
+                : "border-red-100 bg-red-50"
           }`}>
-            <p className={`text-sm font-semibold ${isResult ? "text-emerald-800" : "text-red-800"}`}>
-              {isResult ? "Acelynk watcher completed successfully" : summary.title}
+            <p className={`text-sm font-semibold ${
+              resultNeedsVerification ? "text-amber-800" : isResult ? "text-emerald-800" : "text-red-800"
+            }`}>
+              {resultNeedsVerification
+                ? "Watcher marked this complete, but verification is missing"
+                : isResult ? "Acelynk watcher completed successfully" : summary.title}
             </p>
-            <p className={`mt-1 text-sm ${isResult ? "text-emerald-700" : "text-red-700"}`}>
-              {isResult
-                ? "The final Acelynk screen captured by the watcher is shown below."
-                : summary.explanation}
+            <p className={`mt-1 text-sm ${
+              resultNeedsVerification ? "text-amber-800" : isResult ? "text-emerald-700" : "text-red-700"
+            }`}>
+              {resultNeedsVerification
+                ? "No final Acelynk screenshot is attached to this log. The fields below are the saved CRM values for that run; reprocess it after the latest parser deploy to confirm what Acelynk actually saved."
+                : isResult
+                  ? "The final Acelynk screen captured by the watcher is shown below."
+                  : summary.explanation}
             </p>
           </div>
 
