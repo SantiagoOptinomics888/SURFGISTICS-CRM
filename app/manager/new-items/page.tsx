@@ -224,7 +224,7 @@ export default function ModulesPage() {
 
 function ModuleStatusTable({ resourceType }: { resourceType: ModuleKey }) {
   const queryClient = useQueryClient();
-  const [errorPreview, setErrorPreview] = useState<AcelynkLogEntry | null>(null);
+  const [preview, setPreview] = useState<{ entry: AcelynkLogEntry; kind: "error" | "result" } | null>(null);
 
   const { data, isLoading, error } = useQuery<AcelynkLogEntry[]>({
     queryKey: ["acelynk-log", resourceType],
@@ -313,10 +313,18 @@ function ModuleStatusTable({ resourceType }: { resourceType: ModuleKey }) {
                     <div className="inline-flex items-center gap-2">
                       {row.status === "failed" && row.error_message && (
                         <button
-                          onClick={() => setErrorPreview(row)}
+                          onClick={() => setPreview({ entry: row, kind: "error" })}
                           className="text-xs font-medium px-2.5 py-1 rounded border border-[#E2E8F0] text-[#334155] hover:bg-white hover:border-[#CBD5E1] transition-colors cursor-pointer"
                         >
                           View error
+                        </button>
+                      )}
+                      {row.status === "success" && (
+                        <button
+                          onClick={() => setPreview({ entry: row, kind: "result" })}
+                          className="text-xs font-medium px-2.5 py-1 rounded border border-emerald-200 text-emerald-700 hover:bg-emerald-50 transition-colors cursor-pointer"
+                        >
+                          View result
                         </button>
                       )}
                       {row.status === "failed" && (
@@ -340,29 +348,33 @@ function ModuleStatusTable({ resourceType }: { resourceType: ModuleKey }) {
         Auto-refreshing every 15s. The watcher fires every 60s — a queued Reprocess may take up to a minute to pick up.
       </p>
 
-      {errorPreview && (
-        <ErrorPreviewModal entry={errorPreview} onClose={() => setErrorPreview(null)} />
+      {preview && (
+        <JobPreviewModal
+          key={`${preview.entry.id}-${preview.kind}`}
+          entry={preview.entry}
+          kind={preview.kind}
+          onClose={() => setPreview(null)}
+        />
       )}
     </>
   );
 }
 
-function ErrorPreviewModal({ entry, onClose }: { entry: AcelynkLogEntry; onClose: () => void }) {
+function JobPreviewModal({ entry, kind, onClose }: { entry: AcelynkLogEntry; kind: "error" | "result"; onClose: () => void }) {
   const [screenshotUrl, setScreenshotUrl] = useState<string | null>(null);
   const [screenshotState, setScreenshotState] = useState<"loading" | "ready" | "missing">("loading");
   const [downloadState, setDownloadState] = useState<"idle" | "downloading" | "missing">("idle");
   const [showTechnicalDetails, setShowTechnicalDetails] = useState(false);
   const summary = friendlyErrorSummary(entry);
   const detailsForDisplay = redactEmbeddedData(entry.details ?? {});
+  const isResult = kind === "result";
 
   useEffect(() => {
     let active = true;
     let objectUrl: string | null = null;
-    setScreenshotUrl(null);
-    setScreenshotState("loading");
 
     api
-      .get(`/manager/acelynk-log/${entry.id}/screenshot?kind=error`, { responseType: "blob" })
+      .get(`/manager/acelynk-log/${entry.id}/screenshot?kind=${kind}`, { responseType: "blob" })
       .then((response) => {
         if (!active) return;
         objectUrl = URL.createObjectURL(response.data);
@@ -377,7 +389,7 @@ function ErrorPreviewModal({ entry, onClose }: { entry: AcelynkLogEntry; onClose
       active = false;
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-  }, [entry.id]);
+  }, [entry.id, kind]);
 
   function downloadUploadFile() {
     setDownloadState("downloading");
@@ -405,7 +417,9 @@ function ErrorPreviewModal({ entry, onClose }: { entry: AcelynkLogEntry; onClose
       <div className="relative bg-white rounded-xl shadow-2xl w-full max-w-3xl max-h-[86vh] overflow-hidden flex flex-col">
         <div className="flex items-center justify-between px-6 py-4 border-b border-[#E2E8F0]">
           <div>
-            <h2 className="text-lg font-semibold text-[#020617]">Acelynk error — {entry.identifier}</h2>
+            <h2 className="text-lg font-semibold text-[#020617]">
+              {isResult ? "Acelynk result" : "Acelynk error"} — {entry.identifier}
+            </h2>
             <p className="text-xs text-[#64748B] mt-0.5">
               {entry.importer_account ?? "—"} · attempt #{(entry.retried_count || 0) + 1}
             </p>
@@ -417,11 +431,20 @@ function ErrorPreviewModal({ entry, onClose }: { entry: AcelynkLogEntry; onClose
           </button>
         </div>
         <div className="overflow-y-auto flex-1 px-6 py-5 space-y-5">
-          <div className="rounded-lg border border-red-100 bg-red-50 px-4 py-3">
-            <p className="text-sm font-semibold text-red-800">{summary.title}</p>
-            <p className="mt-1 text-sm text-red-700">{summary.explanation}</p>
+          <div className={`rounded-lg border px-4 py-3 ${
+            isResult ? "border-emerald-100 bg-emerald-50" : "border-red-100 bg-red-50"
+          }`}>
+            <p className={`text-sm font-semibold ${isResult ? "text-emerald-800" : "text-red-800"}`}>
+              {isResult ? "Acelynk watcher completed successfully" : summary.title}
+            </p>
+            <p className={`mt-1 text-sm ${isResult ? "text-emerald-700" : "text-red-700"}`}>
+              {isResult
+                ? "The final Acelynk screen captured by the watcher is shown below."
+                : summary.explanation}
+            </p>
           </div>
 
+          {!isResult && (
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-[#E2E8F0] bg-white px-4 py-3">
             <div>
               <p className="text-sm font-semibold text-[#0F172A]">Need to correct the upload?</p>
@@ -445,6 +468,7 @@ function ErrorPreviewModal({ entry, onClose }: { entry: AcelynkLogEntry; onClose
               {downloadState === "downloading" ? "Preparing..." : "Download upload file"}
             </button>
           </div>
+          )}
 
           {Object.keys(summary.extractedPayload).length > 0 && (
             <div className="rounded-lg border border-[#E2E8F0] bg-white p-4">
@@ -493,6 +517,7 @@ function ErrorPreviewModal({ entry, onClose }: { entry: AcelynkLogEntry; onClose
           </div>
           )}
 
+          {!isResult && (
           <div>
             <p className="text-xs font-semibold text-[#334155] uppercase tracking-wider mb-2">How to fix it</p>
             <ul className="space-y-2">
@@ -504,6 +529,7 @@ function ErrorPreviewModal({ entry, onClose }: { entry: AcelynkLogEntry; onClose
               ))}
             </ul>
           </div>
+          )}
 
           {summary.partErrors.length > 0 && (
             <div>
@@ -559,20 +585,22 @@ function ErrorPreviewModal({ entry, onClose }: { entry: AcelynkLogEntry; onClose
           )}
 
           <div>
-            <p className="text-xs font-semibold text-[#334155] uppercase tracking-wider mb-1.5">Screenshot</p>
+            <p className="text-xs font-semibold text-[#334155] uppercase tracking-wider mb-1.5">
+              {isResult ? "Final result screenshot" : "Screenshot"}
+            </p>
             {screenshotState === "loading" && (
               <div className="h-48 rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] animate-pulse" />
             )}
             {screenshotState === "missing" && (
               <div className="rounded-lg border border-dashed border-[#CBD5E1] bg-[#F8FAFC] px-3 py-8 text-center text-xs text-[#64748B]">
-                No screenshot is attached to this error.
+                No {isResult ? "final result" : "error"} screenshot is attached to this log.
               </div>
             )}
             {screenshotUrl && (
               <a href={screenshotUrl} target="_blank" rel="noreferrer" className="block">
                 <img
                   src={screenshotUrl}
-                  alt={`Acelynk error screenshot for ${entry.identifier}`}
+                  alt={`Acelynk ${isResult ? "result" : "error"} screenshot for ${entry.identifier}`}
                   className="w-full rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] object-contain max-h-[420px]"
                 />
               </a>
