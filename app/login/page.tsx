@@ -25,8 +25,18 @@ export default function LoginPage() {
       });
       saveAuth({ email, role: data.role, importer_account: data.importer_account, access_token: data.access_token, permissions: data.permissions ?? [] });
       router.push(roleRedirect(data.role));
-    } catch {
-      setError("Invalid email or password.");
+    } catch (err: unknown) {
+      const status =
+        err && typeof err === "object" && "response" in err
+          ? (err as { response?: { status?: number } }).response?.status
+          : undefined;
+      if (status === 401 || status === 400) {
+        setError("Invalid email or password.");
+      } else if (status === undefined) {
+        setError("Can't reach the server. Check your connection or the API URL and try again.");
+      } else {
+        setError(`Sign in failed (server error ${status}). Please try again.`);
+      }
     } finally {
       setLoading(false);
     }
