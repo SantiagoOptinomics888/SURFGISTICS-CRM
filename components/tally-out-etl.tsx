@@ -1,10 +1,11 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
-import { Download, FileText, Loader2, Scissors, UploadCloud, X } from "lucide-react";
+import { Download, FileSpreadsheet, FileText, Loader2, Scissors, UploadCloud, X } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import {
   buildFinalCsv,
+  downloadBreakdownXlsx,
   parseFirstRowHeader,
   parseTallyOut,
   runEtl,
@@ -185,6 +186,12 @@ export function TallyOutEtl() {
     URL.revokeObjectURL(url);
   }
 
+  function downloadBreakdown() {
+    if (!result) return;
+    const base = (tallyName.trim() || "FTZ").replace(/[^\w.-]+/g, "_");
+    downloadBreakdownXlsx(result.splits, `${base}_Detailed_Breakdown.xlsx`);
+  }
+
   return (
     <div>
       <PageHeader
@@ -256,7 +263,15 @@ export function TallyOutEtl() {
         </div>
       )}
 
-      {result && <Results result={result} download={download} tab={tab} setTab={setTab} />}
+      {result && (
+        <Results
+          result={result}
+          download={download}
+          downloadBreakdown={downloadBreakdown}
+          tab={tab}
+          setTab={setTab}
+        />
+      )}
     </div>
   );
 }
@@ -268,11 +283,13 @@ export function TallyOutEtl() {
 function Results({
   result,
   download,
+  downloadBreakdown,
   tab,
   setTab,
 }: {
   result: EtlResult;
   download: (rows: EtlResult["final"], suffix: string) => void;
+  downloadBreakdown: () => void;
   tab: Tab;
   setTab: (t: Tab) => void;
 }) {
@@ -344,6 +361,13 @@ function Results({
         >
           <Download className="h-4 w-4" />
           Download Tallyout.csv
+        </button>
+        <button
+          onClick={downloadBreakdown}
+          className="inline-flex items-center gap-2 rounded-md border border-[#0369A1] bg-white px-4 py-2 text-sm font-semibold text-[#0369A1] hover:bg-[#F0F9FF]"
+        >
+          <FileSpreadsheet className="h-4 w-4" />
+          Detailed Breakdown (.xlsx)
         </button>
         {buckets.length > 1 && buckets.map((b) => (
           <button

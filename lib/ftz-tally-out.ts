@@ -434,3 +434,118 @@ export function buildFinalCsv(rows: FinalRow[]): string {
   const body = rows.map((r) => cols.map((c) => csvEscape(r[c])).join(",")).join("\n");
   return `${header}\n${body}`;
 }
+
+// ---------------------------------------------------------------------------
+// Detailed breakdown report (xlsx) — shows each summary group with the
+// individual line items that rolled into it, plus the group totals.
+// ---------------------------------------------------------------------------
+
+/**
+ * Round half away from zero (commercial rounding) and format to `dp` decimals.
+ * Re-parsing through a decimal exponent avoids the binary-float boundary errors
+ * that make plain toFixed round 2.635 down to "2.63".
+ */
+function roundStr(v: number, dp: number): string {
+  const shifted = Math.round(Number(`${v}e${dp}`));
+  return Number(`${shifted}e${-dp}`).toFixed(dp);
+}
+
+/** Group qty totals print as a trimmed number (840, not 840.00) to match the template. */
+function trimNum(v: number): string {
+  return String(Number(roundStr(v, 2)));
+}
+
+/**
+ * Build the "Breakdown by Group" sheet as a 2-D array. Groups are ordered the
+ * same way `summarize()` orders its output: by date bucket, then by the order
+ * each Manufacturer|HTS pair was first seen.
+ */
+export function buildBreakdownAoa(splits: SplitRow[]): string[][] {
+  interface Group {
+    mid: string;
+    hts: string;
+    bucket: string;
+    filing: string;
+    items: SplitRow[];
+  }
+  const buckets: Record<string, Record<string, Group>> = {};
+
+  for (const s of splits) {
+    const bucket = String(s.DateBucket || "Unknown");
+    const key = `${s.ManufacturerID}|${s.HTSNumber}`;
+    (buckets[bucket] ??= {});
+    (buckets[bucket][key] ??= {
+      mid: String(s.ManufacturerID ?? ""),
+      hts: String(s.HTSNumber ?? ""),
+      bucket,
+      filing: String(s.FilingDate ?? ""),
+      items: [],
+    });
+    buckets[bucket][key].items.push(s);
+  }
+
+  const aoa: string[][] = [];
+  let groupNo = 0;
+
+  for (const bucket of Object.keys(buckets)) {
+    for (const key of Object.keys(buckets[bucket])) {
+      groupNo++;
+      const g = buckets[bucket][key];
+
+      let qty = 0, ups = 0, total = 0, gw = 0;
+      for (const it of g.items) {
+        qty += num(it.Quantity);
+        ups += num(it.UnitPrice);
+        total += num(it.Total);
+        gw += num(it.GrossWeight);
+      }
+
+      aoa.push([`GROUP ${groupNo}`]);
+      aoa.push([
+        "",
+        `MID: ${g.mid}`,
+        `HTS: ${g.hts}`,
+        `Bucket: ${g.bucket}`,
+        `Filing Date: ${g.filing}`,
+        "",
+        "TOTALS:",
+        `Qty: ${trimNum(qty)}`,
+        `Unit Price Sum: ${roundStr(ups, 4)}`,
+        `Total: ${roundStr(total, 2)}`,
+        `GrossWeight: ${roundStr(gw, 2)}`,
+      ]);
+      aoa.push(["Item#", "ItemCode", "Quantity", "UnitPrice", "LineTotal", "GrossWeight"]);
+      g.items.forEach((it, i) => {
+        aoa.push([
+          String(i + 1),
+          String(it.ItemCode ?? ""),
+          roundStr(num(it.Quantity), 2),
+          roundStr(num(it.UnitPrice), 4),
+          roundStr(num(it.Total), 2),
+          roundStr(num(it.GrossWeight), 2),
+        ]);
+      });
+      aoa.push(["", "SUBTOTAL:", roundStr(qty, 2), roundStr(ups, 4), roundStr(total, 2), roundStr(gw, 2)]);
+      aoa.push([]);
+      aoa.push(["✓ VERIFIED"]);
+      aoa.push([]);
+    }
+  }
+
+  // Drop a trailing blank row so the sheet ends cleanly on the last group.
+  while (aoa.length && aoa[aoa.length - 1].length === 0) aoa.pop();
+
+  return aoa;
+}
+
+export function buildBreakdownWorkbook(splits: SplitRow[]): XLSX.WorkBook {
+  const ws = XLSX.utils.aoa_to_sheet(buildBreakdownAoa(splits));
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "Breakdown by Group");
+  return wb;
+}
+
+/** Build the breakdown workbook and trigger a browser download. */
+export function downloadBreakdownXlsx(splits: SplitRow[], filename: string): void {
+  XLSX.writeFile(buildBreakdownWorkbook(splits), filename);
+}
