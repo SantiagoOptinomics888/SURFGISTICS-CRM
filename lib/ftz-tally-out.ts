@@ -19,6 +19,15 @@ function num(v: Cell | undefined): number {
   return Number.isNaN(n) ? 0 : n;
 }
 
+function normalizeTallyIn(value: Cell | undefined): string {
+  const raw = String(value ?? "").trim();
+  if (!raw) return "";
+  if (/^\d+$/.test(raw)) {
+    return String(Number(raw));
+  }
+  return raw.replace(/^0+/, "") || raw;
+}
+
 // ---------------------------------------------------------------------------
 // File parsing
 // ---------------------------------------------------------------------------
@@ -102,8 +111,14 @@ export function buildCreatedDateLookup(ftz: DataRow[]): Record<string, string> {
   for (const item of ftz) {
     const itemNo = item.ItemNo1 ?? Object.values(item)[0];
     const tallyIn = String(item.TallyIn);
+    const normalizedTallyIn = normalizeTallyIn(item.TallyIn);
     const key = `${tallyIn}_${itemNo}`;
-    if (item.CreatedDate) lookup[key] = String(item.CreatedDate);
+    if (item.CreatedDate) {
+      lookup[key] = String(item.CreatedDate);
+      if (normalizedTallyIn && normalizedTallyIn !== tallyIn) {
+        lookup[`${normalizedTallyIn}_${itemNo}`] = String(item.CreatedDate);
+      }
+    }
   }
   return lookup;
 }
@@ -122,6 +137,7 @@ export function transformTallyOut(
     const data: DataRow = { ...item };
     const itemCode = String(data.ItemCode ?? "");
     const tallyIn = String(data.TallyIn ?? "");
+    const normalizedTallyIn = normalizeTallyIn(data.TallyIn);
 
     // 1. Replace HTSNumber with the Tariff from Parts
     if (itemCode && tariffLookup[itemCode]) {
@@ -129,7 +145,7 @@ export function transformTallyOut(
     }
 
     // 2. Attach CreatedDate from the FTZ lookup
-    data.CreatedDate = createdDateLookup[`${tallyIn}_${itemCode}`] || "";
+    data.CreatedDate = createdDateLookup[`${tallyIn}_${itemCode}`] || createdDateLookup[`${normalizedTallyIn}_${itemCode}`] || "";
 
     // 3. Resolve Quantity / Total.
     //    The current Tally Out report no longer carries dedicated Quantity/Total
@@ -412,7 +428,7 @@ export function runEtl({ tallyOut, parts, ftz, tallyType }: EtlInput): EtlResult
   return {
     isEstimate,
     tariffCount: Object.keys(tariffLookup).length,
-    dateCount: Object.keys(createdDateLookup).length,
+    dateCount: transformed.filter((row) => String(row.CreatedDate ?? "").trim() !== "").length,
     tallyOutRows: lineItems,
     transformed,
     splits,
