@@ -1,8 +1,10 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
-import { Download, FileSpreadsheet, FileText, Loader2, Scissors, UploadCloud, X } from "lucide-react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Download, Eye, FileSpreadsheet, FileText, Loader2, Scissors, UploadCloud, X } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
+import { api } from "@/lib/api";
 import {
   buildFinalCsv,
   downloadBreakdownXlsx,
@@ -13,6 +15,7 @@ import {
   type EtlResult,
   type SplitRow,
 } from "@/lib/ftz-tally-out";
+import type { AcelynkLogEntry } from "@/lib/types";
 
 // ---------------------------------------------------------------------------
 // File slot
@@ -133,8 +136,58 @@ function DataTable({
 // ---------------------------------------------------------------------------
 
 type Tab = "splits" | "transformed" | "summary" | "final";
+const HISTORY_SOURCE = "tally_out_etl";
+const FINAL_COLUMNS = ["Part", "Tariff_Number", "Country_of_Origin", "Quantity", "Unit_Price", "Total_Line_Value", "Gross_Weight_KG", "MID_Code", "SP1", "Privileged_Filing_Date", "DateBucket"];
+const FINAL_NUMERIC = new Set(["Quantity", "Unit_Price", "Total_Line_Value", "Gross_Weight_KG"]);
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
+}
+
+function asRows(value: unknown): Record<string, Cell>[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((row) => asRecord(row))
+    .filter((row) => Object.keys(row).length > 0)
+    .map((row) =>
+      Object.fromEntries(
+        Object.entries(row).map(([key, value]) => [
+          key,
+          typeof value === "number" ? value : value == null ? "" : String(value),
+        ]),
+      ) as Record<string, Cell>,
+    );
+}
+
+function historyDetails(entry: AcelynkLogEntry) {
+  const details = asRecord(entry.details);
+  const counts = asRecord(details.counts);
+  const files = asRecord(details.files);
+  return {
+    tallyName: typeof details.tally_name === "string" && details.tally_name ? details.tally_name : entry.identifier,
+    tallyType: typeof details.tally_type === "string" && details.tally_type ? details.tally_type : "Regular",
+    files,
+    finalRows: asRows(details.final_rows),
+    finalCount: typeof counts.final_lines === "number" ? counts.final_lines : asRows(details.final_rows).length,
+    splitCount: typeof counts.split_rows === "number" ? counts.split_rows : null,
+    tariffCount: typeof counts.tariff_matches === "number" ? counts.tariff_matches : null,
+    dateCount: typeof counts.date_matches === "number" ? counts.date_matches : null,
+  };
+}
+
+function formatDateTime(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  return new Date(iso).toLocaleString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
 
 export function TallyOutEtl() {
+  const queryClient = useQueryClient();
   const [tallyFile, setTallyFile] = useState<File | null>(null);
   const [partsFile, setPartsFile] = useState<File | null>(null);
   const [ftzFile, setFtzFile] = useState<File | null>(null);
@@ -145,6 +198,55 @@ export function TallyOutEtl() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [tab, setTab] = useState<Tab>("splits");
+  const [selectedHistory, setSelectedHistory] = useState<AcelynkLogEntry | null>(null);
+
+  const historyQuery = useQuery<AcelynkLogEntry[]>({
+    queryKey: ["tally-out-etl-history"],
+    queryFn: () =>
+      api
+        .get<AcelynkLogEntry[]>("/manager/acelynk-log?resource_type=tally_out&limit=500")
+        .then((response) =>
+          response.data.filter((entry) => asRecord(entry.details).source === HISTORY_SOURCE),
+        ),
+    refetchInterval: 30_000,
+  });
+
+  const saveRun = useMutation({
+    mutationFn: (etl: EtlResult) => {
+      const name = tallyName.trim() || `${tallyType} tally out ${new Date().toLocaleDateString("en-US")}`;
+      return api.post<AcelynkLogEntry>("/manager/acelynk-log", {
+        resource_type: "tally_out",
+        importer_account: null,
+        identifier: name,
+        status: "success",
+        error_message: null,
+        details: {
+          source: HISTORY_SOURCE,
+          tally_name: name,
+          tally_type: tallyType,
+          files: {
+            tally_out: tallyFile?.name ?? null,
+            parts: partsFile?.name ?? null,
+            ftz_periodic: ftzFile?.name ?? null,
+          },
+          counts: {
+            tally_out_lines: etl.tallyOutRows.length,
+            tariff_matches: etl.tariffCount,
+            date_matches: etl.dateCount,
+            split_rows: etl.splits.length,
+            final_lines: etl.final.length,
+            summary_lines: etl.summary.length,
+          },
+          final_rows: etl.final,
+          summary_rows: etl.summary,
+        },
+      });
+    },
+    onSuccess: (response) => {
+      setSelectedHistory(response.data);
+      queryClient.invalidateQueries({ queryKey: ["tally-out-etl-history"] });
+    },
+  });
 
   const ready = tallyFile && partsFile && ftzFile && !busy;
 
@@ -167,6 +269,7 @@ export function TallyOutEtl() {
       });
       setResult(etl);
       setTab("splits");
+      await saveRun.mutateAsync(etl);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to process the files. Check the formats and try again.");
     } finally {
@@ -263,6 +366,13 @@ export function TallyOutEtl() {
         </div>
       )}
 
+      <History
+        entries={historyQuery.data ?? []}
+        isLoading={historyQuery.isLoading}
+        selected={selectedHistory}
+        setSelected={setSelectedHistory}
+      />
+
       {result && (
         <Results
           result={result}
@@ -271,6 +381,135 @@ export function TallyOutEtl() {
           tab={tab}
           setTab={setTab}
         />
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Persisted history
+// ---------------------------------------------------------------------------
+
+function History({
+  entries,
+  isLoading,
+  selected,
+  setSelected,
+}: {
+  entries: AcelynkLogEntry[];
+  isLoading: boolean;
+  selected: AcelynkLogEntry | null;
+  setSelected: (entry: AcelynkLogEntry | null) => void;
+}) {
+  function downloadHistory(entry: AcelynkLogEntry) {
+    const details = historyDetails(entry);
+    const csv = buildFinalCsv(details.finalRows as EtlResult["final"]);
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    const base = details.tallyName.replace(/[^\w.-]+/g, "_") || "Tallyout";
+    a.href = url;
+    a.download = `${base}_Tallyout.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  return (
+    <div className="mt-6 rounded-lg border border-[#E2E8F0] bg-white">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#E2E8F0] px-5 py-4">
+        <div>
+          <h2 className="text-base font-semibold text-[#0F172A]">Processed Tally Outs</h2>
+          <p className="mt-0.5 text-xs text-[#64748B]">Saved ETL runs stay here so admins can review or download prior outputs.</p>
+        </div>
+        <span className="rounded-full bg-[#F1F5F9] px-2.5 py-1 text-xs font-medium text-[#475569]">
+          {entries.length.toLocaleString()} saved
+        </span>
+      </div>
+
+      {isLoading ? (
+        <p className="px-5 py-8 text-center text-sm text-[#94A3B8]">Loading processed tally outs...</p>
+      ) : entries.length === 0 ? (
+        <p className="px-5 py-8 text-center text-sm text-[#94A3B8]">No processed tally outs saved yet.</p>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-[#E2E8F0] bg-[#F8FAFC]">
+                {["Processed", "Tally", "Type", "Final Rows", "Matches", "Files", ""].map((h) => (
+                  <th key={h} className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-[#64748B]">
+                    {h}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-[#F1F5F9]">
+              {entries.map((entry) => {
+                const details = historyDetails(entry);
+                return (
+                  <tr key={entry.id} className="hover:bg-[#F8FAFC]">
+                    <td className="px-4 py-3 text-xs text-[#64748B] whitespace-nowrap">
+                      {formatDateTime(entry.processed_at ?? entry.created_at)}
+                    </td>
+                    <td className="px-4 py-3 font-medium text-[#0F172A] max-w-[220px] truncate">
+                      {details.tallyName}
+                    </td>
+                    <td className="px-4 py-3 text-xs text-[#475569]">{details.tallyType}</td>
+                    <td className="px-4 py-3 text-xs tabular-nums text-[#334155]">{details.finalCount.toLocaleString()}</td>
+                    <td className="px-4 py-3 text-xs text-[#475569] whitespace-nowrap">
+                      Tariff {details.tariffCount ?? "—"} · Date {details.dateCount ?? "—"}
+                    </td>
+                    <td className="px-4 py-3 text-xs text-[#64748B] max-w-[260px] truncate">
+                      {[details.files.tally_out, details.files.parts, details.files.ftz_periodic].filter(Boolean).join(" · ") || "—"}
+                    </td>
+                    <td className="px-4 py-3 text-right whitespace-nowrap">
+                      <div className="inline-flex items-center gap-2">
+                        <button
+                          onClick={() => setSelected(selected?.id === entry.id ? null : entry)}
+                          className="inline-flex items-center gap-1.5 rounded border border-[#E2E8F0] px-2.5 py-1 text-xs font-medium text-[#334155] hover:bg-white"
+                        >
+                          <Eye className="h-3.5 w-3.5" />
+                          {selected?.id === entry.id ? "Hide" : "View rows"}
+                        </button>
+                        <button
+                          onClick={() => downloadHistory(entry)}
+                          className="inline-flex items-center gap-1.5 rounded border border-[#0369A1] px-2.5 py-1 text-xs font-medium text-[#0369A1] hover:bg-[#F0F9FF]"
+                        >
+                          <Download className="h-3.5 w-3.5" />
+                          CSV
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {selected && (
+        <div className="border-t border-[#E2E8F0] p-5">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="text-sm font-semibold text-[#0F172A]">{historyDetails(selected).tallyName}</p>
+              <p className="mt-0.5 text-xs text-[#64748B]">Final rows saved from this ETL run.</p>
+            </div>
+            <button
+              onClick={() => downloadHistory(selected)}
+              className="inline-flex items-center gap-2 rounded-md bg-[#0369A1] px-3 py-2 text-xs font-semibold text-white hover:bg-[#0284C7]"
+            >
+              <Download className="h-4 w-4" />
+              Download CSV
+            </button>
+          </div>
+          <div className="overflow-hidden rounded-lg border border-[#E2E8F0]">
+            <DataTable
+              columns={FINAL_COLUMNS}
+              numeric={FINAL_NUMERIC}
+              rows={historyDetails(selected).finalRows}
+            />
+          </div>
+        </div>
       )}
     </div>
   );
@@ -417,8 +656,8 @@ function Results({
           )}
           {tab === "final" && (
             <DataTable
-              columns={["Part", "Tariff_Number", "Country_of_Origin", "Quantity", "Unit_Price", "Total_Line_Value", "Gross_Weight_KG", "MID_Code", "SP1", "Privileged_Filing_Date", "DateBucket"]}
-              numeric={new Set(["Quantity", "Unit_Price", "Total_Line_Value", "Gross_Weight_KG"])}
+              columns={FINAL_COLUMNS}
+              numeric={FINAL_NUMERIC}
               rows={result.final}
             />
           )}
