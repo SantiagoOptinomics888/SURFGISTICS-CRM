@@ -15,7 +15,6 @@ import {
   type EtlResult,
   type SplitRow,
 } from "@/lib/ftz-tally-out";
-import type { AcelynkLogEntry } from "@/lib/types";
 
 // ---------------------------------------------------------------------------
 // File slot
@@ -136,9 +135,24 @@ function DataTable({
 // ---------------------------------------------------------------------------
 
 type Tab = "splits" | "transformed" | "summary" | "final";
-const HISTORY_SOURCE = "tally_out_etl";
 const FINAL_COLUMNS = ["Part", "Tariff_Number", "Country_of_Origin", "Quantity", "Unit_Price", "Total_Line_Value", "Gross_Weight_KG", "MID_Code", "SP1", "Privileged_Filing_Date", "DateBucket"];
 const FINAL_NUMERIC = new Set(["Quantity", "Unit_Price", "Total_Line_Value", "Gross_Weight_KG"]);
+const ROW_CHUNK_SIZE = 200;
+
+interface TallyOutEtlRun {
+  id: number;
+  created_at: string;
+  updated_at: string;
+  created_by_email: string | null;
+  tally_name: string;
+  tally_type: string;
+  status: "saving" | "success" | "failed";
+  error_message: string | null;
+  files: Record<string, unknown>;
+  counts: Record<string, unknown>;
+  final_rows: Record<string, unknown>[];
+  summary_rows: Record<string, unknown>[];
+}
 
 function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
@@ -159,16 +173,15 @@ function asRows(value: unknown): Record<string, Cell>[] {
     );
 }
 
-function historyDetails(entry: AcelynkLogEntry) {
-  const details = asRecord(entry.details);
-  const counts = asRecord(details.counts);
-  const files = asRecord(details.files);
+function historyDetails(entry: TallyOutEtlRun) {
+  const counts = asRecord(entry.counts);
+  const files = asRecord(entry.files);
   return {
-    tallyName: typeof details.tally_name === "string" && details.tally_name ? details.tally_name : entry.identifier,
-    tallyType: typeof details.tally_type === "string" && details.tally_type ? details.tally_type : "Regular",
+    tallyName: entry.tally_name,
+    tallyType: entry.tally_type || "Regular",
     files,
-    finalRows: asRows(details.final_rows),
-    finalCount: typeof counts.final_lines === "number" ? counts.final_lines : asRows(details.final_rows).length,
+    finalRows: asRows(entry.final_rows),
+    finalCount: typeof counts.final_lines === "number" ? counts.final_lines : asRows(entry.final_rows).length,
     splitCount: typeof counts.split_rows === "number" ? counts.split_rows : null,
     tariffCount: typeof counts.tariff_matches === "number" ? counts.tariff_matches : null,
     dateCount: typeof counts.date_matches === "number" ? counts.date_matches : null,
@@ -198,49 +211,56 @@ export function TallyOutEtl() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [tab, setTab] = useState<Tab>("splits");
-  const [selectedHistory, setSelectedHistory] = useState<AcelynkLogEntry | null>(null);
+  const [selectedHistory, setSelectedHistory] = useState<TallyOutEtlRun | null>(null);
 
-  const historyQuery = useQuery<AcelynkLogEntry[]>({
+  const historyQuery = useQuery<TallyOutEtlRun[]>({
     queryKey: ["tally-out-etl-history"],
-    queryFn: () =>
-      api
-        .get<AcelynkLogEntry[]>("/manager/acelynk-log?resource_type=tally_out&limit=500")
-        .then((response) =>
-          response.data.filter((entry) => asRecord(entry.details).source === HISTORY_SOURCE),
-        ),
+    queryFn: () => api.get<TallyOutEtlRun[]>("/manager/tally-out-etl-runs?limit=500").then((response) => response.data),
     refetchInterval: 30_000,
   });
 
   const saveRun = useMutation({
-    mutationFn: (etl: EtlResult) => {
+    mutationFn: async (etl: EtlResult) => {
       const name = tallyName.trim() || `${tallyType} tally out ${new Date().toLocaleDateString("en-US")}`;
-      return api.post<AcelynkLogEntry>("/manager/acelynk-log", {
-        resource_type: "tally_out",
-        importer_account: null,
-        identifier: name,
-        status: "success",
-        error_message: null,
-        details: {
-          source: HISTORY_SOURCE,
-          tally_name: name,
-          tally_type: tallyType,
-          files: {
-            tally_out: tallyFile?.name ?? null,
-            parts: partsFile?.name ?? null,
-            ftz_periodic: ftzFile?.name ?? null,
-          },
-          counts: {
-            tally_out_lines: etl.tallyOutRows.length,
-            tariff_matches: etl.tariffCount,
-            date_matches: etl.dateCount,
-            split_rows: etl.splits.length,
-            final_lines: etl.final.length,
-            summary_lines: etl.summary.length,
-          },
-          final_rows: etl.final,
-          summary_rows: etl.summary,
+      const created = await api.post<TallyOutEtlRun>("/manager/tally-out-etl-runs", {
+        tally_name: name,
+        tally_type: tallyType,
+        files: {
+          tally_out: tallyFile?.name ?? null,
+          parts: partsFile?.name ?? null,
+          ftz_periodic: ftzFile?.name ?? null,
+        },
+        counts: {
+          tally_out_lines: etl.tallyOutRows.length,
+          tariff_matches: etl.tariffCount,
+          date_matches: etl.dateCount,
+          split_rows: etl.splits.length,
+          final_lines: etl.final.length,
+          summary_lines: etl.summary.length,
         },
       });
+
+      try {
+        for (let i = 0; i < etl.final.length; i += ROW_CHUNK_SIZE) {
+          await api.post<TallyOutEtlRun>(`/manager/tally-out-etl-runs/${created.data.id}/rows`, {
+            final_rows: etl.final.slice(i, i + ROW_CHUNK_SIZE),
+          });
+        }
+        for (let i = 0; i < etl.summary.length; i += ROW_CHUNK_SIZE) {
+          await api.post<TallyOutEtlRun>(`/manager/tally-out-etl-runs/${created.data.id}/rows`, {
+            summary_rows: etl.summary.slice(i, i + ROW_CHUNK_SIZE),
+          });
+        }
+        return api.patch<TallyOutEtlRun>(`/manager/tally-out-etl-runs/${created.data.id}/status`, {
+          status: "success",
+        });
+      } catch (err) {
+        await api.patch(`/manager/tally-out-etl-runs/${created.data.id}/status`, {
+          status: "failed",
+          error_message: err instanceof Error ? err.message : "Failed to save all ETL rows.",
+        }).catch(() => undefined);
+        throw err;
+      }
     },
     onSuccess: (response) => {
       setSelectedHistory(response.data);
@@ -396,12 +416,12 @@ function History({
   selected,
   setSelected,
 }: {
-  entries: AcelynkLogEntry[];
+  entries: TallyOutEtlRun[];
   isLoading: boolean;
-  selected: AcelynkLogEntry | null;
-  setSelected: (entry: AcelynkLogEntry | null) => void;
+  selected: TallyOutEtlRun | null;
+  setSelected: (entry: TallyOutEtlRun | null) => void;
 }) {
-  function downloadHistory(entry: AcelynkLogEntry) {
+  function downloadHistory(entry: TallyOutEtlRun) {
     const details = historyDetails(entry);
     const csv = buildFinalCsv(details.finalRows as EtlResult["final"]);
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
@@ -435,7 +455,7 @@ function History({
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-[#E2E8F0] bg-[#F8FAFC]">
-                {["Processed", "Tally", "Type", "Final Rows", "Matches", "Files", ""].map((h) => (
+                {["Processed", "Tally", "Status", "Type", "Final Rows", "Matches", "Files", ""].map((h) => (
                   <th key={h} className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-[#64748B]">
                     {h}
                   </th>
@@ -448,10 +468,21 @@ function History({
                 return (
                   <tr key={entry.id} className="hover:bg-[#F8FAFC]">
                     <td className="px-4 py-3 text-xs text-[#64748B] whitespace-nowrap">
-                      {formatDateTime(entry.processed_at ?? entry.created_at)}
+                      {formatDateTime(entry.updated_at ?? entry.created_at)}
                     </td>
                     <td className="px-4 py-3 font-medium text-[#0F172A] max-w-[220px] truncate">
                       {details.tallyName}
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                        entry.status === "success"
+                          ? "bg-emerald-50 text-emerald-700"
+                          : entry.status === "failed"
+                            ? "bg-red-50 text-red-700"
+                            : "bg-amber-50 text-amber-700"
+                      }`}>
+                        {entry.status === "success" ? "Saved" : entry.status === "failed" ? "Failed" : "Saving"}
+                      </span>
                     </td>
                     <td className="px-4 py-3 text-xs text-[#475569]">{details.tallyType}</td>
                     <td className="px-4 py-3 text-xs tabular-nums text-[#334155]">{details.finalCount.toLocaleString()}</td>
