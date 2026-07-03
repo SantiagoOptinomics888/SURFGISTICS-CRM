@@ -477,16 +477,33 @@ function trimNum(v: number): string {
  * each Manufacturer|HTS pair was first seen.
  */
 export function buildBreakdownAoa(splits: SplitRow[]): string[][] {
+  return buildBreakdownAoaFromRows(
+    splits.map((s) => ({
+      ItemCode: s.ItemCode,
+      ManufacturerID: s.ManufacturerID,
+      HTSNumber: s.HTSNumber,
+      Description: s.Description,
+      Quantity: s.Quantity,
+      UnitPrice: s.UnitPrice,
+      Total: s.Total,
+      GrossWeight: s.GrossWeight,
+      DateBucket: s.DateBucket,
+      FilingDate: s.FilingDate,
+    })),
+  );
+}
+
+export function buildBreakdownAoaFromRows(rows: DataRow[]): string[][] {
   interface Group {
     mid: string;
     hts: string;
     bucket: string;
     filing: string;
-    items: SplitRow[];
+    items: DataRow[];
   }
   const buckets: Record<string, Record<string, Group>> = {};
 
-  for (const s of splits) {
+  for (const s of rows) {
     const bucket = String(s.DateBucket || "Unknown");
     const key = `${s.ManufacturerID}|${s.HTSNumber}`;
     (buckets[bucket] ??= {});
@@ -554,8 +571,18 @@ export function buildBreakdownAoa(splits: SplitRow[]): string[][] {
   return aoa;
 }
 
+export function buildBreakdownCsvFromRows(rows: DataRow[]): string {
+  return buildBreakdownAoaFromRows(rows)
+    .map((row) => row.map(csvEscape).join(","))
+    .join("\n");
+}
+
 export function buildBreakdownWorkbook(splits: SplitRow[]): XLSX.WorkBook {
-  const ws = XLSX.utils.aoa_to_sheet(buildBreakdownAoa(splits));
+  return buildBreakdownWorkbookFromRows(splits);
+}
+
+export function buildBreakdownWorkbookFromRows(rows: DataRow[]): XLSX.WorkBook {
+  const ws = XLSX.utils.aoa_to_sheet(buildBreakdownAoaFromRows(rows));
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, "Breakdown by Group");
   return wb;
@@ -564,4 +591,8 @@ export function buildBreakdownWorkbook(splits: SplitRow[]): XLSX.WorkBook {
 /** Build the breakdown workbook and trigger a browser download. */
 export function downloadBreakdownXlsx(splits: SplitRow[], filename: string): void {
   XLSX.writeFile(buildBreakdownWorkbook(splits), filename);
+}
+
+export function downloadBreakdownRowsXlsx(rows: DataRow[], filename: string): void {
+  XLSX.writeFile(buildBreakdownWorkbookFromRows(rows), filename);
 }

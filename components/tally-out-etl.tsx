@@ -7,6 +7,8 @@ import { PageHeader } from "@/components/ui/page-header";
 import { api } from "@/lib/api";
 import {
   buildFinalCsv,
+  buildBreakdownCsvFromRows,
+  downloadBreakdownRowsXlsx,
   downloadBreakdownXlsx,
   parseFirstRowHeader,
   parseTallyOut,
@@ -137,7 +139,6 @@ function DataTable({
 type Tab = "splits" | "transformed" | "summary" | "final";
 const FINAL_COLUMNS = ["Part", "Tariff_Number", "Country_of_Origin", "Quantity", "Unit_Price", "Total_Line_Value", "Gross_Weight_KG", "MID_Code", "SP1", "Privileged_Filing_Date", "DateBucket"];
 const FINAL_NUMERIC = new Set(["Quantity", "Unit_Price", "Total_Line_Value", "Gross_Weight_KG"]);
-const BREAKDOWN_COLUMNS = ["Source_Row", "ItemCode", "TallyIn", "HTSNumber", "ManufacturerID", "Description", "Quantity", "UnitPrice", "Total", "GrossWeight", "CreatedDate", "DateBucket", "FilingDate", "HTS_Part", "HTS_Count"];
 const ROW_CHUNK_SIZE = 200;
 
 interface TallyOutEtlRun {
@@ -173,18 +174,6 @@ function asRows(value: unknown): Record<string, Cell>[] {
         ]),
       ) as Record<string, Cell>,
     );
-}
-
-function csvEscape(value: Cell | undefined): string {
-  if (value == null) return "";
-  const text = String(value);
-  return /[",\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
-}
-
-function buildRowsCsv(rows: Record<string, Cell>[], columns: string[]): string {
-  const header = columns.join(",");
-  const body = rows.map((row) => columns.map((column) => csvEscape(row[column])).join(",")).join("\n");
-  return `${header}\n${body}`;
 }
 
 function downloadCsv(filename: string, csv: string) {
@@ -358,7 +347,7 @@ export function TallyOutEtl() {
   function downloadBreakdownCsv() {
     if (!result) return;
     const base = (tallyName.trim() || "FTZ").replace(/[^\w.-]+/g, "_");
-    downloadCsv(`${base}_Detailed_Breakdown.csv`, buildRowsCsv(breakdownRowsFromSplits(result.splits), BREAKDOWN_COLUMNS));
+    downloadCsv(`${base}_Detailed_Breakdown.csv`, buildBreakdownCsvFromRows(breakdownRowsFromSplits(result.splits)));
   }
 
   function downloadBreakdown() {
@@ -484,7 +473,13 @@ function History({
   function downloadHistoryBreakdown(entry: TallyOutEtlRun) {
     const details = historyDetails(entry);
     const base = details.tallyName.replace(/[^\w.-]+/g, "_") || "Tallyout";
-    downloadCsv(`${base}_Detailed_Breakdown.csv`, buildRowsCsv(details.breakdownRows, BREAKDOWN_COLUMNS));
+    downloadCsv(`${base}_Detailed_Breakdown.csv`, buildBreakdownCsvFromRows(details.breakdownRows));
+  }
+
+  function downloadHistoryBreakdownXlsx(entry: TallyOutEtlRun) {
+    const details = historyDetails(entry);
+    const base = details.tallyName.replace(/[^\w.-]+/g, "_") || "Tallyout";
+    downloadBreakdownRowsXlsx(details.breakdownRows, `${base}_Detailed_Breakdown.xlsx`);
   }
 
   return (
@@ -569,6 +564,14 @@ function History({
                           <FileSpreadsheet className="h-3.5 w-3.5" />
                           Breakdown CSV
                         </button>
+                        <button
+                          onClick={() => downloadHistoryBreakdownXlsx(entry)}
+                          disabled={historyDetails(entry).breakdownRows.length === 0}
+                          className="inline-flex items-center gap-1.5 rounded border border-[#E2E8F0] px-2.5 py-1 text-xs font-medium text-[#334155] hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          <FileSpreadsheet className="h-3.5 w-3.5" />
+                          Breakdown XLSX
+                        </button>
                       </div>
                     </td>
                   </tr>
@@ -600,6 +603,14 @@ function History({
             >
               <FileSpreadsheet className="h-4 w-4" />
               Breakdown CSV
+            </button>
+            <button
+              onClick={() => downloadHistoryBreakdownXlsx(selected)}
+              disabled={historyDetails(selected).breakdownRows.length === 0}
+              className="inline-flex items-center gap-2 rounded-md border border-[#0369A1] bg-white px-3 py-2 text-xs font-semibold text-[#0369A1] hover:bg-[#F0F9FF] disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <FileSpreadsheet className="h-4 w-4" />
+              Breakdown XLSX
             </button>
           </div>
           <div className="overflow-hidden rounded-lg border border-[#E2E8F0]">
