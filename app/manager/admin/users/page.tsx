@@ -15,6 +15,7 @@ const PERMISSION_LABELS: Record<string, string> = {
   tally_in: "Tally In",
   inbond: "In-Bond",
   tally_out: "Tally Out",
+  imports: "Imports",
 };
 
 function extractError(err: unknown, fallback: string): string {
