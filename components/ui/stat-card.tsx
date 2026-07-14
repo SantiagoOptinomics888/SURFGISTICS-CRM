@@ -7,14 +7,14 @@ interface StatCardProps {
 
 export function StatCard({ label, value, icon, active }: StatCardProps) {
   return (
-    <div className={`bg-white border rounded-lg p-5 transition-colors ${
-      active ? "border-[#0369A1] ring-1 ring-[#0369A1]/20" : "border-[#E2E8F0]"
+    <div className={`rounded-lg border bg-white p-5 shadow-[0_1px_2px_rgba(10,35,48,0.025)] transition-colors ${
+      active ? "border-[#0C91B6] ring-1 ring-[#0C91B6]/15" : "border-[#DDE6E9]"
     }`}>
       <div className="flex items-center justify-between mb-3">
-        <span className="text-xs font-semibold text-[#64748B] uppercase tracking-wider">{label}</span>
-        <span className="text-[#94A3B8]">{icon}</span>
+        <span className="text-[11px] font-bold uppercase text-[#6D828A]">{label}</span>
+        <span className="text-[#7CA5B2]">{icon}</span>
       </div>
-      <p className="text-3xl font-semibold text-[#020617] tabular-nums">{value}</p>
+      <p className="text-3xl font-bold text-[#142B35] tabular-nums">{value}</p>
     </div>
   );
 }

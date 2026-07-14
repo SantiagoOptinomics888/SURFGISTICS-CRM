@@ -1,264 +1,162 @@
 "use client";
 
+import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
+import {
+  ArrowRight,
+  Boxes,
+  CheckCircle2,
+  ClipboardList,
+  Clock3,
+  FileInput,
+  PackageCheck,
+  Ship,
+  Upload,
+} from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { api } from "@/lib/api";
 import { getAuth } from "@/lib/auth";
 import { Skeleton } from "@/components/ui/skeleton";
-import { LiveBadge } from "@/components/ui/live-badge";
 import type { ArtsPart, FtzLineItem, Inbond, TallyOut } from "@/lib/types";
 
 const POLL = 15_000;
 
+type Shipment = {
+  id: number;
+  hbl: string;
+  status: string;
+  shipment_type: string | null;
+  updated_at: string;
+  documents: { id: number; document_type: string }[];
+};
+
+const shipmentStatus: Record<string, { label: string; tone: string }> = {
+  isf_automation_pending: { label: "ISF processing", tone: "bg-cyan-50 text-cyan-800" },
+  awaiting_documents: { label: "Documents needed", tone: "bg-amber-50 text-amber-800" },
+  documents_ready: { label: "Documents ready", tone: "bg-emerald-50 text-emerald-800" },
+  awaiting_classification: { label: "Under review", tone: "bg-violet-50 text-violet-800" },
+  ftz_automation_pending: { label: "E214 processing", tone: "bg-cyan-50 text-cyan-800" },
+  domestic_automation_pending: { label: "7501 processing", tone: "bg-cyan-50 text-cyan-800" },
+};
+
 export default function VendorDashboard() {
   const user = getAuth();
-  const perms = user?.permissions ?? [];
-  const hasPerm = (p: string) => perms.includes(p);
+  const permissions = user?.permissions ?? [];
+  const hasPerm = (permission: string) => permissions.includes(permission);
 
-  const { data: arts, isLoading: l1 } = useQuery<ArtsPart[]>({
-    queryKey: ["arts_parts"],
-    queryFn: () => api.get("/parts").then((r) => r.data),
-    refetchInterval: POLL,
-    enabled: hasPerm("parts"),
+  const { data: parts, isLoading: partsLoading } = useQuery<ArtsPart[]>({
+    queryKey: ["arts_parts"], queryFn: () => api.get("/parts").then((r) => r.data), refetchInterval: POLL, enabled: hasPerm("parts"),
   });
-  const { data: ftz, isLoading: l2 } = useQuery<FtzLineItem[]>({
-    queryKey: ["ftz_line_items"],
-    queryFn: () => api.get("/ftz_line_item").then((r) => r.data),
-    refetchInterval: POLL,
-    enabled: hasPerm("tally_in"),
+  const { data: tallyIn, isLoading: tallyInLoading } = useQuery<FtzLineItem[]>({
+    queryKey: ["ftz_line_items"], queryFn: () => api.get("/ftz_line_item").then((r) => r.data), refetchInterval: POLL, enabled: hasPerm("tally_in"),
   });
-  const { data: inbonds, isLoading: l3 } = useQuery<Inbond[]>({
-    queryKey: ["inbonds"],
-    queryFn: () => api.get("/inbond").then((r) => r.data),
-    refetchInterval: POLL,
-    enabled: hasPerm("inbond"),
+  const { data: inbonds, isLoading: inbondLoading } = useQuery<Inbond[]>({
+    queryKey: ["inbonds"], queryFn: () => api.get("/inbond").then((r) => r.data), refetchInterval: POLL, enabled: hasPerm("inbond"),
   });
-  const { data: tally, isLoading: l4 } = useQuery<TallyOut[]>({
-    queryKey: ["tally_outs"],
-    queryFn: () => api.get("/tally_out").then((r) => r.data),
-    refetchInterval: POLL,
-    enabled: hasPerm("tally_out"),
+  const { data: tallyOut, isLoading: tallyOutLoading } = useQuery<TallyOut[]>({
+    queryKey: ["tally_outs"], queryFn: () => api.get("/tally_out").then((r) => r.data), refetchInterval: POLL, enabled: hasPerm("tally_out"),
+  });
+  const { data: shipments, isLoading: shipmentsLoading } = useQuery<Shipment[]>({
+    queryKey: ["shipments"], queryFn: () => api.get("/shipments").then((r) => r.data), refetchInterval: POLL, enabled: hasPerm("imports"),
   });
 
-  const isLoading = (hasPerm("parts") && l1) || (hasPerm("tally_in") && l2) || (hasPerm("inbond") && l3) || (hasPerm("tally_out") && l4);
+  const isLoading = partsLoading || tallyInLoading || inbondLoading || tallyOutLoading || shipmentsLoading;
+  const tallyApproved = tallyIn?.filter((row) => row.concurrence === true).length ?? 0;
+  const tallyPending = tallyIn?.filter((row) => row.concurrence !== true).length ?? 0;
+  const activeShipments = shipments?.filter((shipment) => !shipment.status.includes("complete")).length ?? 0;
 
-  const totalPartsValue = arts?.reduce((s, r) => s + (r.value ?? 0), 0) ?? 0;
-  const ftzApproved = ftz?.filter((r) => r.concurrence === true).length ?? 0;
-  const ftzPending = ftz?.filter((r) => r.concurrence !== true).length ?? 0;
+  const metrics = [
+    hasPerm("imports") && { label: "Active shipments", value: activeShipments, detail: `${shipments?.length ?? 0} total HBLs`, href: "/vendor/imports", icon: Ship, tone: "text-cyan-700 bg-cyan-50" },
+    hasPerm("parts") && { label: "Registered parts", value: parts?.length ?? 0, detail: `$${(parts?.reduce((sum, row) => sum + (row.value ?? 0), 0) ?? 0).toLocaleString()} total value`, href: "/vendor/arts-parts", icon: Boxes, tone: "text-sky-700 bg-sky-50" },
+    hasPerm("tally_in") && { label: "Tally-in items", value: tallyIn?.length ?? 0, detail: `${tallyApproved} approved · ${tallyPending} pending`, href: "/vendor/tally-in", icon: ClipboardList, tone: "text-amber-700 bg-amber-50" },
+    hasPerm("tally_out") && { label: "Delivery orders", value: new Set(tallyOut?.map((row) => row.delivery_order_no).filter(Boolean)).size, detail: `${tallyOut?.length ?? 0} tally-out rows`, href: "/vendor/tally-out", icon: PackageCheck, tone: "text-emerald-700 bg-emerald-50" },
+    hasPerm("inbond") && { label: "In-bond records", value: inbonds?.length ?? 0, detail: `${new Set(inbonds?.map((row) => row.container).filter(Boolean)).size} containers`, href: "/vendor/inbonds", icon: CheckCircle2, tone: "text-violet-700 bg-violet-50" },
+  ].filter((item): item is { label: string; value: number; detail: string; href: string; icon: LucideIcon; tone: string } => Boolean(item));
 
-  // Build unified activity feed — last 8 events across all resources sorted by created_at
-  const activityFeed = [
-    ...(arts ?? []).map((r) => ({ type: "arts_part" as const, id: r.id, label: r.part_number ?? "Part", sub: r.description ?? "", created_at: r.created_at })),
-    ...(ftz ?? []).map((r) => ({ type: "ftz" as const, id: r.id, label: r.part ?? "FTZ Item", sub: `Talian ${r.hbl ?? "—"}`, created_at: r.created_at })),
-    ...(inbonds ?? []).map((r) => ({ type: "inbond" as const, id: r.id, label: r.container ?? "Container", sub: r.part_number ?? "", created_at: r.created_at })),
-    ...(tally ?? []).map((r) => ({ type: "tally" as const, id: r.id, label: r.delivery_order_no ?? "DO", sub: r.item_code ?? "", created_at: r.created_at })),
-  ]
-    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-    .slice(0, 8);
+  const quickActions = [
+    hasPerm("imports") && { label: "Create shipment", detail: "Upload an ISF and delivery address", href: "/vendor/imports", icon: Ship },
+    hasPerm("tally_in") && { label: "Add arrival notice", detail: "Send a shipment for header review", href: "/vendor/arrival-notice", icon: FileInput },
+    hasPerm("parts") && { label: "Upload parts", detail: "Register or update the parts catalog", href: "/vendor/arts-parts", icon: Boxes },
+    hasPerm("tally_in") && { label: "Upload tally in", detail: "Validate parts and submit line items", href: "/vendor/tally-in", icon: Upload },
+  ].filter((item): item is { label: string; detail: string; href: string; icon: LucideIcon } => Boolean(item));
 
-  const typeConfig = {
-    arts_part: { label: "Parts", color: "bg-blue-50 text-blue-700", href: "/vendor/arts-parts" },
-    ftz:       { label: "Tally In",     color: "bg-purple-50 text-purple-700", href: "/vendor/tally-in" },
-    inbond:    { label: "In-Bond",      color: "bg-amber-50 text-amber-700", href: "/vendor/inbonds" },
-    tally:     { label: "Tally Out",    color: "bg-emerald-50 text-emerald-700", href: "/vendor/tally-out" },
-  };
+  const activity = [
+    ...(parts ?? []).map((row) => ({ id: `part-${row.id}`, label: row.part_number ?? "Part", detail: row.description ?? "Part updated", date: row.created_at, href: "/vendor/arts-parts", type: "Part" })),
+    ...(tallyIn ?? []).map((row) => ({ id: `tally-${row.id}`, label: row.hbl ?? "Tally in", detail: row.part ?? "Line item", date: row.created_at, href: "/vendor/tally-in", type: "Tally In" })),
+    ...(shipments ?? []).map((row) => ({ id: `shipment-${row.id}`, label: row.hbl, detail: shipmentStatus[row.status]?.label ?? row.status.replaceAll("_", " "), date: row.updated_at, href: "/vendor/imports", type: "Shipment" })),
+  ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).slice(0, 7);
 
   return (
-    <div>
-      {/* Header with tracking code + live badge */}
-      <div className="flex items-start justify-between mb-6">
+    <div className="space-y-7">
+      <div className="flex flex-col gap-4 border-b border-[#DDE6E9] pb-6 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h1 className="text-xl font-semibold text-[#020617] tracking-tight">Dashboard</h1>
-          <div className="flex items-center gap-3 mt-1.5">
-            <LiveBadge />
-          </div>
+          <p className="text-[11px] font-bold uppercase text-[#0C91B6]">Vendor workspace</p>
+          <h1 className="mt-1.5 text-2xl font-bold text-[#142B35]">Your import operations</h1>
+          <p className="mt-1 text-sm text-[#607780]">Track shipments, documents, parts, and filings from one place.</p>
         </div>
-        {user?.importer_account && (
-          <div className="text-right">
-            <p className="text-xs text-[#94A3B8] uppercase tracking-widest font-medium mb-1.5">Importer Code</p>
-            <div className="inline-flex items-center gap-2 bg-[#0F172A] text-white px-3 py-1.5 rounded-md">
-              <svg className="w-3.5 h-3.5 text-[#0EA5E9] flex-shrink-0" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M5.25 8.25h15m-16.5 7.5h15m-1.8-13.5-3.9 19.5m-2.1-19.5-3.9 19.5" />
-              </svg>
-              <span className="font-mono font-semibold text-sm tracking-widest">{user.importer_account}</span>
-            </div>
-            <p className="text-xs text-[#94A3B8] mt-1">All API calls filtered by this code</p>
-          </div>
-        )}
+        {user?.importer_account && <div className="rounded-md border border-[#D5E2E5] bg-white px-3 py-2 font-mono text-sm font-bold text-[#31515D]">{user.importer_account}</div>}
       </div>
 
-      {/* Stat cards — each clickable, reacts to API calls */}
-      {isLoading ? (
-        <div className="grid grid-cols-2 gap-4 lg:grid-cols-4 mb-6">
-          {[...Array(4)].map((_, i) => (
-            <div key={i} className="bg-white border border-[#E2E8F0] rounded-lg p-5">
-              <Skeleton className="h-3 w-20 mb-3" /><Skeleton className="h-8 w-10" />
-            </div>
-          ))}
-        </div>
-      ) : (
-        <div className="grid grid-cols-2 gap-4 lg:grid-cols-4 mb-6">
-          {[
-            hasPerm("parts") && { label: "Parts", value: arts?.length ?? 0, sub: `$${totalPartsValue.toLocaleString()} value`, href: "/vendor/arts-parts" },
-            hasPerm("tally_in") && { label: "Tally In", value: ftz?.length ?? 0, sub: `${ftzApproved} approved · ${ftzPending} pending`, href: "/vendor/tally-in" },
-            hasPerm("inbond") && { label: "In-Bonds", value: inbonds?.length ?? 0, sub: `${new Set(inbonds?.map((r) => r.container).filter(Boolean)).size} containers`, href: "/vendor/inbonds" },
-            hasPerm("tally_out") && { label: "Tally Out", value: tally?.length ?? 0, sub: `${new Set(tally?.map((r) => r.delivery_order_no).filter(Boolean)).size} delivery orders`, href: "/vendor/tally-out" },
-          ].filter((x): x is { label: string; value: number; sub: string; href: string } => !!x).map(({ label, value, sub, href }) => (
-            <a key={label} href={href} className="bg-white border border-[#E2E8F0] rounded-lg p-5 hover:border-[#0369A1] hover:shadow-sm transition-fast cursor-pointer group block">
-              <div className="flex items-center justify-between mb-2.5">
-                <span className="text-xs font-semibold text-[#64748B] uppercase tracking-wider">{label}</span>
-                <svg className="w-3.5 h-3.5 text-[#CBD5E1] group-hover:text-[#0369A1] transition-fast" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />
-                </svg>
-              </div>
-              <p className="text-3xl font-semibold text-[#0369A1] tabular-nums">{value}</p>
-              <p className="text-xs text-[#94A3B8] mt-1.5">{sub}</p>
-            </a>
-          ))}
-        </div>
+      {quickActions.length > 0 && (
+        <section>
+          <div className="mb-3 flex items-center justify-between"><h2 className="section-label">Start a task</h2><span className="text-xs text-[#82969D]">Choose what you need to do</span></div>
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            {quickActions.map((action) => {
+              const Icon = action.icon;
+              return (
+                <Link key={action.label} href={action.href} className="group flex min-h-24 items-start gap-3 rounded-lg border border-[#DDE6E9] bg-white p-4 shadow-[0_1px_2px_rgba(10,35,48,0.025)] transition-colors hover:border-[#64B8CB]">
+                  <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-md bg-[#E2F5F8] text-[#087FA3]"><Icon className="h-[18px] w-[18px]" /></div>
+                  <div className="min-w-0"><p className="text-sm font-bold text-[#18333E]">{action.label}</p><p className="mt-1 text-xs leading-5 text-[#71858D]">{action.detail}</p></div>
+                  <ArrowRight className="ml-auto h-4 w-4 flex-shrink-0 text-[#B0C0C5] group-hover:text-[#087FA3]" />
+                </Link>
+              );
+            })}
+          </div>
+        </section>
       )}
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-5">
-        {/* Activity feed — reacts to incoming API calls */}
-        <div className="lg:col-span-3">
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-sm font-semibold text-[#020617] uppercase tracking-wider">Live Activity</h2>
-            <span className="text-xs text-[#94A3B8]">Last 8 events · updates every 15s</span>
+      <section>
+        <h2 className="section-label mb-3">At a glance</h2>
+        {isLoading ? (
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">{[...Array(4)].map((_, index) => <div key={index} className="surface p-5"><Skeleton className="h-4 w-28" /><Skeleton className="mt-5 h-8 w-16" /></div>)}</div>
+        ) : (
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            {metrics.map((metric) => {
+              const Icon = metric.icon;
+              return <Link key={metric.label} href={metric.href} className="surface group p-5 transition-colors hover:border-[#64B8CB]"><div className="flex items-start justify-between"><p className="text-xs font-bold text-[#607780]">{metric.label}</p><span className={`flex h-8 w-8 items-center justify-center rounded-md ${metric.tone}`}><Icon className="h-4 w-4" /></span></div><p className="mt-3 text-3xl font-bold text-[#142B35] tabular-nums">{metric.value}</p><p className="mt-1 text-xs text-[#81949B]">{metric.detail}</p></Link>;
+            })}
           </div>
-          <div className="bg-white border border-[#E2E8F0] rounded-lg overflow-hidden">
-            {isLoading ? (
-              [...Array(5)].map((_, i) => (
-                <div key={i} className="flex items-center gap-3 px-4 py-3.5 border-b border-[#F1F5F9]">
-                  <Skeleton className="w-14 h-5 rounded-full" />
-                  <div className="flex-1"><Skeleton className="h-3.5 w-32 mb-1.5" /><Skeleton className="h-3 w-24" /></div>
-                  <Skeleton className="h-3 w-16" />
-                </div>
-              ))
-            ) : activityFeed.length === 0 ? (
-              <div className="px-5 py-10 text-center">
-                <p className="text-sm text-[#94A3B8]">No activity yet.</p>
-                <p className="text-xs text-[#CBD5E1] mt-1">Make an API call to see it appear here.</p>
-              </div>
-            ) : (
-              activityFeed.map((event) => {
-                const cfg = typeConfig[event.type];
-                const ts = new Date(event.created_at);
-                return (
-                  <a key={`${event.type}-${event.id}`} href={cfg.href} className="flex items-center gap-3 px-4 py-3.5 border-b border-[#F1F5F9] hover:bg-[#F8FAFC] transition-fast cursor-pointer last:border-0">
-                    <span className={`text-xs font-semibold px-2 py-0.5 rounded-full whitespace-nowrap ${cfg.color}`}>{cfg.label}</span>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-[#0F172A] truncate">{event.label}</p>
-                      {event.sub && <p className="text-xs text-[#94A3B8] truncate">{event.sub}</p>}
-                    </div>
-                    <span className="text-xs text-[#CBD5E1] whitespace-nowrap flex-shrink-0">
-                      {ts.toLocaleDateString("en-US", { month: "short", day: "numeric" })}
-                    </span>
-                  </a>
-                );
-              })
-            )}
+        )}
+      </section>
+
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.45fr)_minmax(320px,0.8fr)]">
+        <section>
+          <div className="mb-3 flex items-center justify-between"><h2 className="section-label">Recent activity</h2><span className="inline-flex items-center gap-1.5 text-xs text-[#6D828A]"><span className="h-1.5 w-1.5 rounded-full bg-emerald-500" /> Live</span></div>
+          <div className="surface overflow-hidden divide-y divide-[#E8EFF1]">
+            {activity.length === 0 ? <EmptyState icon={Clock3} title="No activity yet" detail="Your latest shipment and upload activity will appear here." /> : activity.map((event) => (
+              <Link key={event.id} href={event.href} className="flex items-center gap-3 px-4 py-3.5 hover:bg-[#F7FAFA] sm:px-5">
+                <span className="w-20 flex-shrink-0 text-[10px] font-bold uppercase text-[#0C91B6]">{event.type}</span>
+                <div className="min-w-0 flex-1"><p className="truncate text-sm font-semibold text-[#203B46]">{event.label}</p><p className="truncate text-xs text-[#81949B]">{event.detail}</p></div>
+                <span className="flex-shrink-0 text-xs text-[#9AABB1]">{new Date(event.date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</span>
+              </Link>
+            ))}
           </div>
-        </div>
+        </section>
 
-        {/* Right column — FTZ status + connection info */}
-        <div className="lg:col-span-2 space-y-4">
-          {hasPerm("tally_in") && (
-            <div>
-              <h2 className="text-sm font-semibold text-[#020617] uppercase tracking-wider mb-3">Arrival Notice</h2>
-              <a
-                href="/vendor/arrival-notice"
-                className="block rounded-lg border border-[#E2E8F0] bg-white p-4 transition-fast hover:border-[#0369A1] hover:shadow-sm"
-              >
-                <div className="flex items-start gap-3">
-                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-[#E0F2FE] text-[#0369A1]">
-                    <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5A3.375 3.375 0 0 0 10.125 2.25H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
-                    </svg>
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-sm font-semibold text-[#0F172A]">Upload arrival notice</p>
-                    <p className="mt-1 text-xs leading-relaxed text-[#64748B]">
-                      Queue E214 Entry Header extraction and Acelynk automation from the arrival notice file.
-                    </p>
-                  </div>
-                </div>
-              </a>
-            </div>
-          )}
-
-          {/* API Connection box */}
-          <div>
-            <h2 className="text-sm font-semibold text-[#020617] uppercase tracking-wider mb-3">API Connection</h2>
-            <div className="bg-white border border-[#E2E8F0] rounded-lg p-4 space-y-3">
-              <div className="flex items-start gap-2.5">
-                <div className="w-2 h-2 rounded-full bg-emerald-500 mt-1.5 flex-shrink-0" />
-                <div>
-                  <p className="text-xs font-semibold text-[#334155]">Endpoint</p>
-                  <p className="text-xs font-mono text-[#64748B] break-all">{process.env.NEXT_PUBLIC_API_URL ?? "api.surfgistics.com"}</p>
-                </div>
-              </div>
-              <div className="border-t border-[#F1F5F9] pt-3">
-                <p className="text-xs font-semibold text-[#334155] mb-1">Your filter key</p>
-                <div className="bg-[#F8FAFC] rounded px-2.5 py-1.5 border border-[#E2E8F0]">
-                  <p className="text-xs font-mono text-[#0369A1] font-semibold">
-                    importer_account: {user?.importer_account ?? "—"}
-                  </p>
-                </div>
-                <p className="text-xs text-[#94A3B8] mt-1.5 leading-relaxed">
-                  Every record you POST to the API must include this code. The CRM auto-filters by it.
-                </p>
-              </div>
-              <div className="border-t border-[#F1F5F9] pt-3 space-y-1.5">
-                <p className="text-xs font-semibold text-[#334155]">Available endpoints</p>
-                {[
-                  hasPerm("parts") && "/parts",
-                  hasPerm("tally_in") && "/ftz_line_item",
-                  hasPerm("inbond") && "/inbond",
-                  hasPerm("tally_out") && "/tally_out",
-                ].filter((x): x is string => !!x).map((ep) => (
-                  <div key={ep} className="flex items-center gap-2">
-                    <span className="text-xs bg-[#E0F2FE] text-[#0369A1] font-mono px-1.5 py-0.5 rounded">POST</span>
-                    <span className="text-xs font-mono text-[#64748B]">{ep}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
+        <section>
+          <div className="mb-3 flex items-center justify-between"><h2 className="section-label">Shipment status</h2>{hasPerm("imports") && <Link href="/vendor/imports" className="text-xs font-bold text-[#087FA3]">View all</Link>}</div>
+          <div className="surface overflow-hidden divide-y divide-[#E8EFF1]">
+            {!hasPerm("imports") || !shipments?.length ? <EmptyState icon={Ship} title="No shipments yet" detail="New shipments will appear here after an ISF is uploaded." /> : shipments.slice(0, 5).map((shipment) => {
+              const status = shipmentStatus[shipment.status] ?? { label: shipment.status.replaceAll("_", " "), tone: "bg-slate-100 text-slate-700" };
+              return <Link key={shipment.id} href="/vendor/imports" className="block px-4 py-3.5 hover:bg-[#F7FAFA]"><div className="flex items-center justify-between gap-3"><p className="truncate font-mono text-sm font-bold text-[#203B46]">{shipment.hbl}</p><span className={`flex-shrink-0 rounded-full px-2 py-1 text-[10px] font-bold ${status.tone}`}>{status.label}</span></div><p className="mt-1 text-xs text-[#81949B]">{shipment.documents.length} document{shipment.documents.length === 1 ? "" : "s"} attached</p></Link>;
+            })}
           </div>
-
-          {/* FTZ concurrence summary */}
-          {hasPerm("tally_in") && (ftz ?? []).length > 0 && (
-            <div>
-              <h2 className="text-sm font-semibold text-[#020617] uppercase tracking-wider mb-3">FTZ Status</h2>
-              <div className="bg-white border border-[#E2E8F0] rounded-lg p-4">
-                <div className="flex items-center gap-4 mb-3">
-                  <div>
-                    <p className="text-xs text-[#64748B] uppercase tracking-wider font-medium">Approved</p>
-                    <p className="text-2xl font-semibold text-emerald-600 tabular-nums">{ftzApproved}</p>
-                  </div>
-                  <div className="w-px h-8 bg-[#E2E8F0]" />
-                  <div>
-                    <p className="text-xs text-[#64748B] uppercase tracking-wider font-medium">Pending</p>
-                    <p className="text-2xl font-semibold text-amber-600 tabular-nums">{ftzPending}</p>
-                  </div>
-                  <div className="w-px h-8 bg-[#E2E8F0]" />
-                  <div>
-                    <p className="text-xs text-[#64748B] uppercase tracking-wider font-medium">Rate</p>
-                    <p className="text-2xl font-semibold text-[#020617] tabular-nums">
-                      {(ftz ?? []).length > 0 ? Math.round((ftzApproved / (ftz ?? []).length) * 100) : 0}%
-                    </p>
-                  </div>
-                </div>
-                {/* Progress bar */}
-                <div className="w-full h-1.5 bg-[#F1F5F9] rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-emerald-500 rounded-full transition-all duration-500"
-                    style={{ width: `${(ftz ?? []).length > 0 ? (ftzApproved / (ftz ?? []).length) * 100 : 0}%` }}
-                  />
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
+        </section>
       </div>
     </div>
   );
+}
+
+function EmptyState({ icon: Icon, title, detail }: { icon: LucideIcon; title: string; detail: string }) {
+  return <div className="px-5 py-10 text-center"><Icon className="mx-auto h-7 w-7 text-[#9EB0B6]" /><p className="mt-3 text-sm font-bold text-[#31515D]">{title}</p><p className="mx-auto mt-1 max-w-xs text-xs leading-5 text-[#81949B]">{detail}</p></div>;
 }

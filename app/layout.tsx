@@ -10,7 +10,8 @@ const geistSans = Geist({
 
 export const metadata: Metadata = {
   title: "Surfgistics CRM",
-  description: "Surfgistics FTZ & Customs Operations",
+  description: "Freight, customs, and FTZ operations in one connected workspace.",
+  icons: { icon: "/brand/surfgistics-mark.png", apple: "/brand/surfgistics-mark.png" },
 };
 
 export default function RootLayout({

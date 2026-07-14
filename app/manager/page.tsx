@@ -9,7 +9,6 @@ import {
   CheckCircle2,
   ClipboardList,
   Clock3,
-  Database,
   FileCheck2,
   Package,
   RefreshCw,
@@ -21,6 +20,13 @@ import {
 import { api } from "@/lib/api";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { AcelynkLogEntry, ManagerStats, RecentActivityItem } from "@/lib/types";
+
+type ImportShipment = {
+  id: number;
+  hbl: string;
+  status: string;
+  updated_at: string;
+};
 
 const moduleMeta = {
   parts: {
@@ -108,17 +114,17 @@ function StatTile({
   tone?: string;
 }) {
   return (
-    <div className="bg-white border border-[#E2E8F0] rounded-lg p-5">
+    <div className="surface p-5">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <p className="text-xs font-semibold text-[#64748B] uppercase tracking-wider">{label}</p>
-          <p className="text-3xl font-semibold text-[#020617] tabular-nums mt-2">{value}</p>
+          <p className="text-[11px] font-bold uppercase text-[#6D828A]">{label}</p>
+          <p className="mt-2 text-3xl font-bold text-[#142B35] tabular-nums">{value}</p>
         </div>
-        <div className={`h-9 w-9 rounded-md bg-[#F1F5F9] flex items-center justify-center ${tone}`}>
+        <div className={`flex h-9 w-9 items-center justify-center rounded-md bg-[#EDF4F5] ${tone}`}>
           <Icon className="h-4 w-4" />
         </div>
       </div>
-      <p className="text-xs text-[#64748B] mt-3">{detail}</p>
+      <p className="mt-3 text-xs text-[#71858D]">{detail}</p>
     </div>
   );
 }
@@ -137,6 +143,12 @@ export default function ManagerDashboard() {
   const { data: acelynkLogs, isLoading: logsLoading } = useQuery<AcelynkLogEntry[]>({
     queryKey: ["manager_acelynk_logs_overview"],
     queryFn: () => api.get("/manager/acelynk-log?limit=50").then((r) => r.data),
+    refetchInterval: 30000,
+  });
+
+  const { data: importShipments, isLoading: shipmentsLoading } = useQuery<ImportShipment[]>({
+    queryKey: ["shipments", "manager", "overview"],
+    queryFn: () => api.get("/shipments").then((r) => r.data),
     refetchInterval: 30000,
   });
 
@@ -185,14 +197,17 @@ export default function ManagerDashboard() {
         };
 
   const HealthIcon = health.icon;
+  const shipmentAttention = (importShipments ?? []).filter((shipment) =>
+    ["isf_automation_pending", "awaiting_documents", "awaiting_classification"].includes(shipment.status)
+  );
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+      <div className="flex flex-col gap-4 border-b border-[#DDE6E9] pb-6 lg:flex-row lg:items-end lg:justify-between">
         <div>
-          <p className="text-xs font-semibold text-[#64748B] uppercase tracking-wider">Admin Command Center</p>
-          <h1 className="text-2xl font-semibold text-[#020617] tracking-tight mt-1">Operations dashboard</h1>
-          <p className="text-sm text-[#64748B] mt-1">Monitor vendor uploads, Acelynk pushes, and records that need review.</p>
+          <p className="text-[11px] font-bold uppercase text-[#0C91B6]">Admin workspace</p>
+          <h1 className="mt-1.5 text-2xl font-bold text-[#142B35]">Operations overview</h1>
+          <p className="mt-1 text-sm text-[#607780]">See what is moving, what needs attention, and where to act next.</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {stats?.last_updated && (
@@ -202,12 +217,30 @@ export default function ManagerDashboard() {
           )}
           <Link
             href="/manager/new-items"
-            className="inline-flex items-center gap-2 rounded-md bg-[#0369A1] px-3 py-2 text-sm font-semibold text-white hover:bg-[#075985] transition-colors"
+            className="inline-flex items-center gap-2 rounded-md bg-[#087FA3] px-3 py-2 text-sm font-bold text-white transition-colors hover:bg-[#076C8B]"
           >
             Review Modules
             <ArrowRight className="h-4 w-4" />
           </Link>
         </div>
+      </div>
+
+      <div className="grid gap-3 md:grid-cols-3">
+        <Link href="/manager/imports" className="surface group flex items-center gap-3 p-4 transition-colors hover:border-[#64B8CB]">
+          <div className="flex h-9 w-9 items-center justify-center rounded-md bg-cyan-50 text-cyan-700"><Ship className="h-[18px] w-[18px]" /></div>
+          <div className="min-w-0 flex-1"><p className="text-sm font-bold text-[#203B46]">Import shipments</p><p className="text-xs text-[#71858D]">{shipmentsLoading ? "Loading..." : `${shipmentAttention.length} need attention`}</p></div>
+          <ArrowRight className="h-4 w-4 text-[#B3C1C6] group-hover:text-[#087FA3]" />
+        </Link>
+        <Link href="/manager/new-items" className="surface group flex items-center gap-3 p-4 transition-colors hover:border-[#64B8CB]">
+          <div className="flex h-9 w-9 items-center justify-center rounded-md bg-amber-50 text-amber-700"><RefreshCw className="h-[18px] w-[18px]" /></div>
+          <div className="min-w-0 flex-1"><p className="text-sm font-bold text-[#203B46]">Automation queue</p><p className="text-xs text-[#71858D]">{acelynkSummary.failed.length + acelynkSummary.pending.length} open jobs</p></div>
+          <ArrowRight className="h-4 w-4 text-[#B3C1C6] group-hover:text-[#087FA3]" />
+        </Link>
+        <Link href="/manager/vendors" className="surface group flex items-center gap-3 p-4 transition-colors hover:border-[#64B8CB]">
+          <div className="flex h-9 w-9 items-center justify-center rounded-md bg-emerald-50 text-emerald-700"><Users className="h-[18px] w-[18px]" /></div>
+          <div className="min-w-0 flex-1"><p className="text-sm font-bold text-[#203B46]">Vendor accounts</p><p className="text-xs text-[#71858D]">{formatNumber(stats?.total_vendors)} accounts</p></div>
+          <ArrowRight className="h-4 w-4 text-[#B3C1C6] group-hover:text-[#087FA3]" />
+        </Link>
       </div>
 
       <div className={`border rounded-lg ${health.bg} ${health.border} p-5`}>
@@ -249,11 +282,11 @@ export default function ManagerDashboard() {
       ) : (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
           <StatTile
-            label="Total Records"
-            value={formatNumber(stats?.total_records)}
-            detail="Across parts, tally in, in-bond, and tally out"
-            icon={Database}
-            tone="text-slate-700"
+            label="Import Shipments"
+            value={formatNumber(importShipments?.length)}
+            detail={`${shipmentAttention.length} currently need attention`}
+            icon={Ship}
+            tone="text-cyan-700"
           />
           <StatTile
             label="Vendors"

@@ -6,6 +6,7 @@ import { getAuth, type AuthUser } from "@/lib/auth";
 import Sidebar from "./sidebar";
 import ImpersonationBanner from "./impersonation-banner";
 import MobileNav from "./mobile-nav";
+import AppTopbar from "./app-topbar";
 
 interface Props {
   requiredRole?: "vendor" | "manager";
@@ -33,13 +34,14 @@ export default function ProtectedLayout({ requiredRole, children }: Props) {
   if (!authState.ready || !authState.user) return null;
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] flex flex-col">
+    <div className="flex min-h-screen flex-col bg-[#F3F7F8]">
       <ImpersonationBanner />
       <MobileNav />
       <div className="flex min-w-0 flex-1">
         <Sidebar />
         <main className="min-w-0 flex-1 overflow-auto">
-          <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6 md:px-8 md:py-8">
+          <AppTopbar />
+          <div className="mx-auto max-w-[1480px] px-4 py-6 sm:px-6 md:px-8 md:py-8 lg:px-10">
             {children}
           </div>
         </main>
