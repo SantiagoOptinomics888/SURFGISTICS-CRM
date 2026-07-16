@@ -68,6 +68,8 @@ const activityTypeLabels: Record<string, { label: string; color: string }> = {
 };
 
 const resourceLabels: Record<string, string> = {
+  isf_acelynk: "ISF · Acelynk",
+  isf_gofreight: "ISF · GoFreight",
   parts: "Parts",
   ftz_line_item: "Tally In",
   e214_entry_header: "E214 Entry Header",

@@ -31,7 +31,7 @@ export type NavLink = {
 
 export const vendorLinks: NavLink[] = [
   { href: "/vendor", label: "Overview", section: "Workspace", icon: LayoutDashboard, permission: null },
-  { href: "/vendor/imports", label: "Shipments", section: "Workspace", icon: Ship, permission: "imports" },
+  { href: "/vendor/imports", label: "ISF & Shipments", section: "Workspace", icon: Ship, permission: "imports" },
   { href: "/vendor/arts-parts", label: "Parts", section: "Operations", icon: Boxes, permission: "parts" },
   { href: "/vendor/tally-in", label: "Tally In", section: "Operations", icon: ClipboardList, permission: "tally_in" },
   { href: "/vendor/arrival-notice", label: "Arrival Notices", section: "Operations", icon: FileInput, permission: "tally_in" },
@@ -41,7 +41,7 @@ export const vendorLinks: NavLink[] = [
 
 export const managerLinks: NavLink[] = [
   { href: "/manager", label: "Overview", section: "Workspace", icon: LayoutDashboard },
-  { href: "/manager/imports", label: "Import Shipments", section: "Workspace", icon: Ship },
+  { href: "/manager/imports", label: "ISF & Shipments", section: "Workspace", icon: Ship },
   { href: "/manager/new-items", label: "Automation", section: "Workspace", icon: PackageCheck },
   { href: "/manager/tally-out-etl", label: "Tally Out ETL", section: "Tools", icon: FlaskConical },
   { href: "/manager/vendors", label: "Vendors", section: "Management", icon: Users },

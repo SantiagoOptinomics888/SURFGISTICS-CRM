@@ -74,7 +74,7 @@ export default function VendorDashboard() {
   ].filter((item): item is { label: string; value: number; detail: string; href: string; icon: LucideIcon; tone: string } => Boolean(item));
 
   const quickActions = [
-    hasPerm("imports") && { label: "Create shipment", detail: "Upload an ISF and delivery address", href: "/vendor/imports", icon: Ship },
+    hasPerm("imports") && { label: "Upload ISF", detail: "Start Acelynk and GoFreight automatically", href: "/vendor/imports", icon: Ship },
     hasPerm("tally_in") && { label: "Add arrival notice", detail: "Send a shipment for header review", href: "/vendor/arrival-notice", icon: FileInput },
     hasPerm("parts") && { label: "Upload parts", detail: "Register or update the parts catalog", href: "/vendor/arts-parts", icon: Boxes },
     hasPerm("tally_in") && { label: "Upload tally in", detail: "Validate parts and submit line items", href: "/vendor/tally-in", icon: Upload },

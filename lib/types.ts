@@ -93,7 +93,7 @@ export interface VendorDetail {
   last_updated: string | null;
 }
 
-export const MODULE_PERMISSIONS = ["parts", "tally_in", "inbond", "tally_out"] as const;
+export const MODULE_PERMISSIONS = ["imports", "parts", "tally_in", "inbond", "tally_out"] as const;
 export type ModulePermission = (typeof MODULE_PERMISSIONS)[number];
 
 export interface AdminUser {
@@ -141,7 +141,14 @@ export interface NewItemsResponse {
   tally_outs: TallyOut[];
 }
 
-export type AcelynkResource = "parts" | "ftz_line_item" | "inbond" | "tally_out" | "e214_entry_header";
+export type AcelynkResource =
+  | "parts"
+  | "ftz_line_item"
+  | "inbond"
+  | "tally_out"
+  | "e214_entry_header"
+  | "isf_acelynk"
+  | "isf_gofreight";
 export type AcelynkStatus = "pending" | "success" | "failed";
 
 export interface AcelynkLogEntry {

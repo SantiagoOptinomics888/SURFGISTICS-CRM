@@ -2,7 +2,7 @@
 
 import { FormEvent, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Download, FileText, Ship, UploadCloud } from "lucide-react";
+import { CheckCircle2, Download, FileText, Ship, UploadCloud, Workflow } from "lucide-react";
 import { api } from "@/lib/api";
 import { PageHeader } from "@/components/ui/page-header";
 
@@ -48,7 +48,7 @@ export default function ImportsPage() {
   const createShipment = useMutation({
     mutationFn: async (form: FormData) => (await api.post("/shipments/isf", form)).data,
     onSuccess: (data: Shipment) => {
-      setMessage(`Shipment ${data.hbl} created. The ISF is waiting for the Phase 2 filing automation.`);
+      setMessage(`Shipment ${data.hbl} created. Acelynk and GoFreight jobs are now queued automatically.`);
       setIsfFile(null);
       queryClient.invalidateQueries({ queryKey: ["shipments"] });
     },
@@ -87,10 +87,20 @@ export default function ImportsPage() {
 
   return (
     <div>
-      <PageHeader title="Imports" subtitle="Create and track each import shipment by HBL." />
+      <PageHeader title="ISF & Shipments" subtitle="Upload an ISF once and track its Acelynk and GoFreight processing by HBL." />
 
-      <form onSubmit={submitIsf} className="border-y border-[#E2E8F0] bg-white py-6">
-        <div className="grid gap-4 md:grid-cols-3">
+      <form onSubmit={submitIsf} className="surface overflow-hidden">
+        <div className="flex flex-col gap-4 border-b border-[#E2E8F0] bg-[#F8FAFC] px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <div className="flex items-center gap-2 text-sm font-bold text-[#142B35]"><UploadCloud className="h-4 w-4 text-[#087FA3]" /> Upload a new ISF</div>
+            <p className="mt-1 text-xs text-[#607780]">The HBL becomes the shipment identifier throughout the workflow.</p>
+          </div>
+          <div className="flex flex-wrap items-center gap-3 text-xs font-semibold text-[#536A73]">
+            <span className="inline-flex items-center gap-1.5"><CheckCircle2 className="h-4 w-4 text-emerald-600" /> Acelynk</span>
+            <span className="inline-flex items-center gap-1.5"><CheckCircle2 className="h-4 w-4 text-emerald-600" /> GoFreight</span>
+          </div>
+        </div>
+        <div className="grid gap-4 px-5 py-5 md:grid-cols-3">
           <Field name="hbl" label="HBL" required />
           <Field name="client_email" label="Client email" type="email" required />
           <Field name="delivery_name" label="Delivery company" />
@@ -101,7 +111,7 @@ export default function ImportsPage() {
           <Field name="delivery_postal_code" label="ZIP code" required />
           <Field name="delivery_country" label="Country" defaultValue="US" required />
         </div>
-        <div className="mt-5 flex flex-wrap items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3 border-t border-[#E2E8F0] px-5 py-4">
           <input
             ref={isfRef}
             type="file"
@@ -111,9 +121,10 @@ export default function ImportsPage() {
           <button type="button" onClick={() => isfRef.current?.click()} className="inline-flex items-center gap-2 rounded-md border border-[#CBD5E1] px-3 py-2 text-sm font-medium text-[#334155]">
             <FileText className="h-4 w-4" /> {isfFile?.name ?? "Select ISF"}
           </button>
-          <button disabled={createShipment.isPending} className="inline-flex items-center gap-2 rounded-md bg-[#0369A1] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
-            <UploadCloud className="h-4 w-4" /> {createShipment.isPending ? "Creating..." : "Create shipment"}
+          <button disabled={createShipment.isPending} className="inline-flex items-center gap-2 rounded-md bg-[#087FA3] px-4 py-2 text-sm font-semibold text-white hover:bg-[#076C8B] disabled:opacity-50">
+            <Workflow className="h-4 w-4" /> {createShipment.isPending ? "Starting automation..." : "Upload ISF & start automation"}
           </button>
+          <span className="text-xs text-[#71858D]">PDF, TXT, CSV, or XLSX up to 15MB</span>
         </div>
       </form>
 

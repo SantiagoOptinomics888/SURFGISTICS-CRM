@@ -1,9 +1,11 @@
 "use client";
 
+import { FormEvent, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CalendarClock, Check, FileText, Ship } from "lucide-react";
+import { CalendarClock, Check, CheckCircle2, FileText, Ship, UploadCloud, Workflow } from "lucide-react";
 import { api } from "@/lib/api";
 import { PageHeader } from "@/components/ui/page-header";
+import type { AdminUser } from "@/lib/types";
 
 type Shipment = {
   id: number;
@@ -21,21 +23,93 @@ type Shipment = {
 
 export default function ManagerImportsPage() {
   const queryClient = useQueryClient();
+  const isfRef = useRef<HTMLInputElement>(null);
+  const [isfFile, setIsfFile] = useState<File | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
   const shipments = useQuery<Shipment[]>({
     queryKey: ["shipments", "manager"],
     queryFn: async () => (await api.get("/shipments")).data,
     refetchInterval: 30_000,
   });
+  const vendors = useQuery<AdminUser[]>({
+    queryKey: ["admin-users", "isf-upload"],
+    queryFn: async () => (await api.get("/admin/users")).data,
+  });
   const refresh = () => queryClient.invalidateQueries({ queryKey: ["shipments", "manager"] });
+  const createShipment = useMutation({
+    mutationFn: async (form: FormData) => (await api.post("/shipments/isf", form)).data,
+    onSuccess: (data: Shipment) => {
+      setMessage(`${data.hbl} was queued for Acelynk and GoFreight.`);
+      setIsfFile(null);
+      refresh();
+    },
+    onError: (error: unknown) => setMessage(apiError(error, "Could not upload the ISF.")),
+  });
   const markProcessed = useMutation({ mutationFn: (hbl: string) => api.post(`/shipments/${encodeURIComponent(hbl)}/isf-processed`), onSuccess: refresh });
   const classify = useMutation({
     mutationFn: ({ hbl, shipmentType }: { hbl: string; shipmentType: string }) => api.patch(`/shipments/${encodeURIComponent(hbl)}/classification`, { shipment_type: shipmentType, approve: true }),
     onSuccess: refresh,
   });
 
+  function submitIsf(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!isfFile) {
+      setMessage("Select the ISF file before starting automation.");
+      return;
+    }
+    const form = new FormData(event.currentTarget);
+    form.append("file", isfFile);
+    createShipment.mutate(form);
+  }
+
   return (
     <div>
-      <PageHeader title="Imports" subtitle="Review shipments from ISF upload through Acelynk handoff." />
+      <PageHeader title="ISF & Import Shipments" subtitle="Review every ISF from upload through its Acelynk and GoFreight handoff." />
+
+      <form onSubmit={submitIsf} className="surface mb-7 overflow-hidden">
+        <div className="flex flex-col gap-4 border-b border-[#E2E8F0] bg-[#F8FAFC] px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <div className="flex items-center gap-2 text-sm font-bold text-[#142B35]"><UploadCloud className="h-4 w-4 text-[#087FA3]" /> Upload ISF for a client</div>
+            <p className="mt-1 text-xs text-[#607780]">One upload creates both destination jobs automatically.</p>
+          </div>
+          <div className="flex items-center gap-3 text-xs font-semibold text-[#536A73]">
+            <span className="inline-flex items-center gap-1.5"><CheckCircle2 className="h-4 w-4 text-emerald-600" /> Acelynk</span>
+            <span className="inline-flex items-center gap-1.5"><CheckCircle2 className="h-4 w-4 text-emerald-600" /> GoFreight</span>
+          </div>
+        </div>
+        <div className="grid gap-4 px-5 py-5 md:grid-cols-3">
+          <label className="block text-xs font-semibold uppercase text-[#64748B]">
+            Importer account
+            <select name="importer_account" required className={fieldClass} defaultValue="">
+              <option value="" disabled>Select client account</option>
+              {vendors.data?.filter((user) => user.role === "vendor" && user.importer_account).map((user) => (
+                <option key={user.id} value={user.importer_account ?? ""}>{user.importer_account} - {user.email}</option>
+              ))}
+            </select>
+          </label>
+          <Field name="hbl" label="HBL" required />
+          <Field name="client_email" label="Client email" type="email" required />
+          <Field name="delivery_name" label="Delivery company" />
+          <Field name="delivery_line1" label="Delivery address" required />
+          <Field name="delivery_line2" label="Suite / unit" />
+          <Field name="delivery_city" label="City" required />
+          <Field name="delivery_state" label="State" required />
+          <Field name="delivery_postal_code" label="ZIP code" required />
+          <Field name="delivery_country" label="Country" defaultValue="US" required />
+        </div>
+        <div className="flex flex-wrap items-center gap-3 border-t border-[#E2E8F0] px-5 py-4">
+          <input ref={isfRef} type="file" className="hidden" onChange={(event) => setIsfFile(event.target.files?.[0] ?? null)} />
+          <button type="button" onClick={() => isfRef.current?.click()} className="inline-flex items-center gap-2 rounded-md border border-[#CBD5E1] px-3 py-2 text-sm font-medium text-[#334155]">
+            <FileText className="h-4 w-4" /> {isfFile?.name ?? "Select ISF"}
+          </button>
+          <button disabled={createShipment.isPending} className="inline-flex items-center gap-2 rounded-md bg-[#087FA3] px-4 py-2 text-sm font-semibold text-white hover:bg-[#076C8B] disabled:opacity-50">
+            <Workflow className="h-4 w-4" /> {createShipment.isPending ? "Starting automation..." : "Upload ISF & start automation"}
+          </button>
+        </div>
+      </form>
+
+      {message && <div className="mb-5 border-l-4 border-[#087FA3] bg-[#F0F9FF] px-4 py-3 text-sm text-[#0C4A6E]">{message}</div>}
+
       <div className="overflow-hidden border-y border-[#E2E8F0] bg-white">
         {shipments.isLoading && <p className="p-5 text-sm text-[#64748B]">Loading import shipments...</p>}
         {!shipments.isLoading && shipments.data?.length === 0 && <p className="p-5 text-sm text-[#64748B]">No import shipments have been created.</p>}
@@ -101,6 +175,24 @@ export default function ManagerImportsPage() {
       </div>
     </div>
   );
+}
+
+const fieldClass = "mt-1.5 h-10 w-full rounded-md border border-[#CBD5E1] bg-white px-3 text-sm font-normal normal-case text-[#0F172A] outline-none focus:border-[#087FA3]";
+
+function Field({ label, ...props }: React.InputHTMLAttributes<HTMLInputElement> & { label: string }) {
+  return (
+    <label className="block text-xs font-semibold uppercase text-[#64748B]">
+      {label}
+      <input {...props} className={fieldClass} />
+    </label>
+  );
+}
+
+function apiError(error: unknown, fallback: string) {
+  if (error && typeof error === "object" && "response" in error) {
+    return (error as { response?: { data?: { detail?: string } } }).response?.data?.detail ?? fallback;
+  }
+  return fallback;
 }
 
 function Info({ label, value, icon }: { label: string; value: string; icon?: React.ReactNode }) {

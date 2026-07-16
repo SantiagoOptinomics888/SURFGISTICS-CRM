@@ -11,6 +11,8 @@ import type { AcelynkLogEntry, AcelynkResource } from "@/lib/types";
 type ModuleKey = AcelynkResource;
 
 const MODULES: { key: ModuleKey; label: string; automated: boolean }[] = [
+  { key: "isf_acelynk", label: "ISF · Acelynk", automated: true },
+  { key: "isf_gofreight", label: "ISF · GoFreight", automated: true },
   { key: "parts", label: "Parts", automated: true },
   { key: "ftz_line_item", label: "Tally In", automated: true },
   { key: "e214_entry_header", label: "E214 Entry Header", automated: true },
@@ -198,12 +200,12 @@ export default function ModulesPage() {
     <div>
       <PageHeader
         title="Modules"
-        subtitle="Acelynk push status by module — manage retries when a vendor upload fails to reach Acelynk."
+        subtitle="Automation status by destination — follow ISF, parts, tally-in, and entry-header jobs from queue to completion."
       />
 
       {/* Tabs */}
       <div className="border-b border-[#E2E8F0] mb-5">
-        <nav className="flex gap-0 -mb-px">
+        <nav className="-mb-px flex gap-0 overflow-x-auto">
           {MODULES.map((m) => (
             <button
               key={m.key}
@@ -293,7 +295,7 @@ function ModuleStatusTable({ resourceType }: { resourceType: ModuleKey }) {
               {rows.length === 0 && (
                 <tr>
                   <td colSpan={6} className="px-5 py-12 text-center text-sm text-[#94A3B8]">
-                    No Acelynk push attempts logged yet for this module.
+                    No automation jobs have been logged yet for this module.
                   </td>
                 </tr>
               )}
