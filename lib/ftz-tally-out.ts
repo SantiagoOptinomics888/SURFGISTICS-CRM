@@ -28,6 +28,30 @@ function normalizeTallyIn(value: Cell | undefined): string {
   return raw.replace(/^0+/, "") || raw;
 }
 
+const GLOBAL_HTS_CORRECTIONS: Record<string, string> = {
+  "6205302070": "6205.30.2040",
+};
+
+const BENTEX_HTS_CORRECTIONS: Record<string, string> = {
+  "6211421081": "6211.42.1040",
+};
+
+export function normalizeHtsCode(value: Cell | undefined, isBentex: boolean): string {
+  const original = String(value ?? "").trim();
+  const digits = original.replace(/\D/g, "");
+  if (!/^\d{10}$/.test(digits)) return original;
+  if (GLOBAL_HTS_CORRECTIONS[digits]) return GLOBAL_HTS_CORRECTIONS[digits];
+  if (isBentex && BENTEX_HTS_CORRECTIONS[digits]) return BENTEX_HTS_CORRECTIONS[digits];
+  return isBentex ? `${digits.slice(0, 4)}.${digits.slice(4, 6)}.${digits.slice(6)}` : original;
+}
+
+function normalizeHtsList(value: Cell | undefined, isBentex: boolean): string {
+  return String(value ?? "")
+    .split(",")
+    .map((part) => normalizeHtsCode(part, isBentex))
+    .join(", ");
+}
+
 // ---------------------------------------------------------------------------
 // File parsing
 // ---------------------------------------------------------------------------
@@ -132,6 +156,7 @@ export function transformTallyOut(
   tariffLookup: Record<string, string>,
   createdDateLookup: Record<string, string>,
   isEstimate: boolean,
+  isBentex = false,
 ): DataRow[] {
   return tallyOut.map((item) => {
     const data: DataRow = { ...item };
@@ -143,6 +168,7 @@ export function transformTallyOut(
     if (itemCode && tariffLookup[itemCode]) {
       data.HTSNumber = tariffLookup[itemCode];
     }
+    data.HTSNumber = normalizeHtsList(data.HTSNumber, isBentex);
 
     // 2. Attach CreatedDate from the FTZ lookup
     data.CreatedDate = createdDateLookup[`${tallyIn}_${itemCode}`] || createdDateLookup[`${normalizedTallyIn}_${itemCode}`] || "";
@@ -182,12 +208,17 @@ export function transformTallyOut(
 
 const CUTOFF_BUCKET = "2-24-2026 to Present";
 const BEFORE_BUCKET = "Before 2-24-2026";
+const JULY_27_BUCKET = "7-27-2026 to Present";
 
 function getBucket(dateStr: string): { name: string; filingDate: string } | null {
   if (!dateStr) return null;
   const date = new Date(dateStr);
   if (Number.isNaN(date.getTime())) return null;
   const cutoff = new Date("2026-02-24");
+  const july27Cutoff = new Date("2026-07-27");
+  if (date >= july27Cutoff) {
+    return { name: JULY_27_BUCKET, filingDate: "2026-07-27" };
+  }
   return date >= cutoff
     ? { name: CUTOFF_BUCKET, filingDate: "2026-02-24" }
     : { name: BEFORE_BUCKET, filingDate: "2026-02-01" };
@@ -337,7 +368,7 @@ export const FINAL_COLUMNS: string[] = [
 
 export type FinalRow = Record<string, Cell>;
 
-export function buildFinalData(summary: SummaryRow[]): FinalRow[] {
+export function buildFinalData(summary: SummaryRow[], isBentex = false): FinalRow[] {
   return summary.map((data) => {
     const manuID = String(data.ManufacturerID || "");
     const origin = manuID.substring(0, 2);
@@ -383,7 +414,7 @@ export function buildFinalData(summary: SummaryRow[]): FinalRow[] {
       SICountry: "",
       SP1: sp1,
       SP2: "",
-      Zone_Status: "",
+      Zone_Status: isBentex ? "P" : "",
       Privileged_Filing_Date: data.FilingDate,
       Line_Piece_Count: "",
       // Kept for reference / per-bucket splitting (as the original workflow did).
@@ -401,6 +432,7 @@ export interface EtlInput {
   parts: DataRow[];
   ftz: DataRow[];
   tallyType: string;
+  tallyName?: string;
 }
 
 export interface EtlResult {
@@ -414,16 +446,17 @@ export interface EtlResult {
   final: FinalRow[];
 }
 
-export function runEtl({ tallyOut, parts, ftz, tallyType }: EtlInput): EtlResult {
+export function runEtl({ tallyOut, parts, ftz, tallyType, tallyName = "" }: EtlInput): EtlResult {
   const isEstimate = String(tallyType).toLowerCase().includes("estimate");
+  const isBentex = String(tallyName).trim().toLowerCase().includes("bentex");
   const tariffLookup = buildTariffLookup(parts);
   const createdDateLookup = buildCreatedDateLookup(ftz);
   // Keep only real line items — drop any banner/footer rows without an ItemCode.
   const lineItems = tallyOut.filter((r) => String(r.ItemCode ?? "").trim() !== "");
-  const transformed = transformTallyOut(lineItems, tariffLookup, createdDateLookup, isEstimate);
+  const transformed = transformTallyOut(lineItems, tariffLookup, createdDateLookup, isEstimate, isBentex);
   const splits = splitHtsAndGroupByDate(transformed);
   const summary = summarize(splits);
-  const final = buildFinalData(summary);
+  const final = buildFinalData(summary, isBentex);
 
   return {
     isEstimate,

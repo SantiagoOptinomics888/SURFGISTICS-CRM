@@ -327,6 +327,7 @@ export function TallyOutEtl() {
         parts: parseFirstRowHeader(partsBuf),
         ftz: parseFirstRowHeader(ftzBuf),
         tallyType,
+        tallyName,
       });
       setResult(etl);
       setTab("splits");
