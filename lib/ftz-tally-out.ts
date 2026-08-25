@@ -42,7 +42,7 @@ export function normalizeHtsCode(value: Cell | undefined, isBentex: boolean): st
   if (!/^\d{10}$/.test(digits)) return original;
   if (GLOBAL_HTS_CORRECTIONS[digits]) return GLOBAL_HTS_CORRECTIONS[digits];
   if (isBentex && BENTEX_HTS_CORRECTIONS[digits]) return BENTEX_HTS_CORRECTIONS[digits];
-  return isBentex ? `${digits.slice(0, 4)}.${digits.slice(4, 6)}.${digits.slice(6)}` : original;
+  return `${digits.slice(0, 4)}.${digits.slice(4, 6)}.${digits.slice(6)}`;
 }
 
 function normalizeHtsList(value: Cell | undefined, isBentex: boolean): string {
@@ -368,14 +368,14 @@ export const FINAL_COLUMNS: string[] = [
 
 export type FinalRow = Record<string, Cell>;
 
-export function buildFinalData(summary: SummaryRow[], isBentex = false): FinalRow[] {
+export function buildFinalData(summary: SummaryRow[], tallyName = ""): FinalRow[] {
   return summary.map((data) => {
     const manuID = String(data.ManufacturerID || "");
     const origin = manuID.substring(0, 2);
     const sp1 = origin === "EG" ? "N" : "";
 
     return {
-      Invoice_No: "",
+      Invoice_No: tallyName,
       Part: data.ItemCode,
       Commercial_Description: data.Description,
       Country_of_Origin: origin,
@@ -414,7 +414,7 @@ export function buildFinalData(summary: SummaryRow[], isBentex = false): FinalRo
       SICountry: "",
       SP1: sp1,
       SP2: "",
-      Zone_Status: isBentex ? "P" : "",
+      Zone_Status: "P",
       Privileged_Filing_Date: data.FilingDate,
       Line_Piece_Count: "",
       // Kept for reference / per-bucket splitting (as the original workflow did).
@@ -436,6 +436,7 @@ export interface EtlInput {
 }
 
 export interface EtlResult {
+  referenceName: string;
   isEstimate: boolean;
   tariffCount: number;
   dateCount: number;
@@ -456,9 +457,10 @@ export function runEtl({ tallyOut, parts, ftz, tallyType, tallyName = "" }: EtlI
   const transformed = transformTallyOut(lineItems, tariffLookup, createdDateLookup, isEstimate, isBentex);
   const splits = splitHtsAndGroupByDate(transformed);
   const summary = summarize(splits);
-  const final = buildFinalData(summary, isBentex);
+  const final = buildFinalData(summary, tallyName);
 
   return {
+    referenceName: tallyName,
     isEstimate,
     tariffCount: Object.keys(tariffLookup).length,
     dateCount: transformed.filter((row) => String(row.CreatedDate ?? "").trim() !== "").length,
@@ -476,11 +478,22 @@ function csvEscape(v: Cell | undefined): string {
   return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 
+export function normalizeFinalRowsForExport(rows: FinalRow[], tallyName: string): FinalRow[] {
+  const isBentex = tallyName.trim().toLowerCase().includes("bentex");
+  return rows.map((row) => ({
+    ...row,
+    Invoice_No: tallyName,
+    Tariff_Number: normalizeHtsCode(row.Tariff_Number, isBentex),
+    Zone_Status: "P",
+  }));
+}
+
 /** Render Final Data rows as the Tallyout.csv the workflow emailed. */
-export function buildFinalCsv(rows: FinalRow[]): string {
+export function buildFinalCsv(rows: FinalRow[], tallyName = ""): string {
   const cols = [...FINAL_COLUMNS, "DateBucket"];
+  const exportRows = normalizeFinalRowsForExport(rows, tallyName);
   const header = cols.join(",");
-  const body = rows.map((r) => cols.map((c) => csvEscape(r[c])).join(",")).join("\n");
+  const body = exportRows.map((r) => cols.map((c) => csvEscape(r[c])).join(",")).join("\n");
   return `${header}\n${body}`;
 }
 

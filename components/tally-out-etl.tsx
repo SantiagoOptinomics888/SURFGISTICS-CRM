@@ -256,7 +256,7 @@ export function TallyOutEtl() {
 
   const saveRun = useMutation({
     mutationFn: async (etl: EtlResult) => {
-      const name = tallyName.trim() || `${tallyType} tally out ${new Date().toLocaleDateString("en-US")}`;
+      const name = etl.referenceName;
       const created = await api.post<TallyOutEtlRun>("/manager/tally-out-etl-runs", {
         tally_name: name,
         tally_type: tallyType,
@@ -327,7 +327,7 @@ export function TallyOutEtl() {
         parts: parseFirstRowHeader(partsBuf),
         ftz: parseFirstRowHeader(ftzBuf),
         tallyType,
-        tallyName,
+        tallyName: tallyName.trim() || `${tallyType} tally out ${new Date().toLocaleDateString("en-US")}`,
       });
       setResult(etl);
       setTab("splits");
@@ -340,8 +340,9 @@ export function TallyOutEtl() {
   }
 
   function download(rows: EtlResult["final"], suffix: string) {
-    const csv = buildFinalCsv(rows);
-    const base = (tallyName.trim() || "Tallyout").replace(/[^\w.-]+/g, "_");
+    const referenceName = result?.referenceName || tallyName.trim();
+    const csv = buildFinalCsv(rows, referenceName);
+    const base = (referenceName || "Tallyout").replace(/[^\w.-]+/g, "_");
     downloadCsv(`${base}${suffix}.csv`, csv);
   }
 
@@ -466,7 +467,7 @@ function History({
 }) {
   function downloadHistory(entry: TallyOutEtlRun) {
     const details = historyDetails(entry);
-    const csv = buildFinalCsv(details.finalRows as EtlResult["final"]);
+    const csv = buildFinalCsv(details.finalRows as EtlResult["final"], details.tallyName);
     const base = details.tallyName.replace(/[^\w.-]+/g, "_") || "Tallyout";
     downloadCsv(`${base}_Tallyout.csv`, csv);
   }
