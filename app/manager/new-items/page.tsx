@@ -95,6 +95,27 @@ function canRetryHeaderValidation(entry: AcelynkLogEntry) {
     && !d.e214_header_save_may_have_occurred && !d.e214_submit_may_have_occurred;
 }
 
+const MANIFEST_STATE_LABELS: Record<string, string> = {
+  "CRM-MQ-READY": "Queued",
+  "CRM-MQ-HISTORY-RECOVERY-READY": "History recovery queued",
+  "CRM-MQ-IN-PROGRESS": "Running",
+  "CRM-MQ-RESULT-AVAILABLE": "Report ready",
+  "CRM-MQ-NO-MATCH": "No match",
+  "CRM-MQ-REJECTED": "Rejected",
+  "CRM-MQ-OUTCOME-UNKNOWN": "Needs review",
+  "CRM-MQ-HUMAN-TAKEOVER": "Human takeover",
+  "CRM-MQ-SKIPPED-EXISTING": "Already queried",
+  // The request was rejected by CRM or worker validation before any AceLynk
+  // action. The MBL itself is often fine, so do not call this "Invalid MBL".
+  "CRM-MQ-VALIDATION-FAILED": "Validation failed",
+  "CRM-E214-HEADER-READY": "Header queued",
+  "CRM-E214-HEADER-IN-PROGRESS": "Saving header",
+  "CRM-E214-HEADER-VALIDATION-FAILED": "Header validation failed",
+  "CRM-E214-HEADER-FAILED": "Header save failed",
+  "CRM-E214-HEADER-SAVED": "Header saved",
+  "CRM-E214-HEADER-EXISTING-VERIFIED": "Existing header verified",
+};
+
 function manifestStatusLabel(entry: AcelynkLogEntry) {
   const state = asString(asRecord(entry.details).workflow_state) || "";
   if (entry.status === "failed" || /FAILED|REJECTED|NO-MATCH|OUTCOME-UNKNOWN|HUMAN-TAKEOVER/.test(state)) {
@@ -108,23 +129,36 @@ function manifestStatusLabel(entry: AcelynkLogEntry) {
 
 function manifestWorkflowLabel(entry: AcelynkLogEntry) {
   const state = asString(asRecord(entry.details).workflow_state);
-  const labels: Record<string, string> = {
-    "CRM-MQ-READY": "Queued",
-    "CRM-E214-HEADER-READY": "Header queued",
-    "CRM-E214-HEADER-IN-PROGRESS": "Saving header",
-    "CRM-E214-HEADER-VALIDATION-FAILED": "Header validation failed",
-    "CRM-E214-HEADER-SAVED": "Header saved",
-    "CRM-E214-HEADER-EXISTING-VERIFIED": "Existing header verified",
-    "CRM-MQ-IN-PROGRESS": "Running",
-    "CRM-MQ-RESULT-AVAILABLE": "Report ready",
-    "CRM-MQ-NO-MATCH": "No match",
-    "CRM-MQ-REJECTED": "Rejected",
-    "CRM-MQ-OUTCOME-UNKNOWN": "Needs review",
-    "CRM-MQ-HUMAN-TAKEOVER": "Human takeover",
-    "CRM-MQ-SKIPPED-EXISTING": "Already queried",
-    "CRM-MQ-VALIDATION-FAILED": "Invalid MBL",
-  };
-  return state ? labels[state] ?? state.replaceAll("CRM-MQ-", "").replaceAll("-", " ") : STATUS_LABELS[entry.status] ?? entry.status;
+  return state
+    ? MANIFEST_STATE_LABELS[state] ?? state.replace(/^CRM-(?:MQ|E214)-/, "").replaceAll("-", " ")
+    : STATUS_LABELS[entry.status] ?? entry.status;
+}
+
+/** The worker's plain-language reason for a Manifest Query or Header outcome. */
+function manifestReason(entry: AcelynkLogEntry): string | null {
+  return asString(asRecord(entry.details).safe_error_summary) ?? asString(entry.error_message);
+}
+
+function manifestFixes(entry: AcelynkLogEntry, details: Record<string, unknown>) {
+  const category = asString(details.error_category);
+  const state = asString(details.workflow_state);
+  const missing = asStringList(details.missing_fields);
+  const fixes: string[] = [];
+
+  if (category === "invalid_queue_payload") {
+    fixes.push("The worker rejected this request before opening AceLynk, so nothing ran there. Queue a new request that includes the missing facts; Reprocess would resend the same payload.");
+    if (asString(asRecord(details.mbl_input).source) === "isf") {
+      fixes.push("This was an ISF / manual MBL request, which is query-only. To create an E214 Header, upload the Arrival Notice on the E214 Manifest Query page instead.");
+    }
+  } else if (category === "arrival_notice_selection_missing" || missing.length > 0) {
+    fixes.push(`The Arrival Notice did not yield: ${missing.join(", ") || "the required selection facts"}. Request a corrected notice that prints the Master B/L and package quantity, then upload it again.`);
+  } else if (state === "CRM-MQ-VALIDATION-FAILED") {
+    fixes.push("The request failed validation before any AceLynk action. Correct the request and queue it again.");
+  } else {
+    fixes.push("Read the worker's reason above. AceLynk may already have been opened for this job, so reconcile the existing record before authorizing another Get Report or Header Save.");
+  }
+  for (const warning of asStringList(details.warnings)) fixes.push(`Extraction note: ${warning}`);
+  return fixes;
 }
 
 function formatRelative(iso: string): string {
@@ -250,9 +284,12 @@ function friendlyErrorSummary(entry: AcelynkLogEntry) {
   const title = errorCount && errorCount > 0
     ? `${errorCount} row${errorCount === 1 ? "" : "s"} need attention`
     : "Acelynk could not finish this upload";
-  const explanation = entry.error_message
-    ? entry.error_message.replace(/^Acelynk\s*/i, "Acelynk ")
-    : "The watcher reached Acelynk, but the upload did not complete successfully.";
+  const manifest = isManifestQuery(entry);
+  const explanation = manifest
+    ? manifestReason(entry) ?? "The worker recorded no reason for this Manifest Query outcome."
+    : entry.error_message
+      ? entry.error_message.replace(/^Acelynk\s*/i, "Acelynk ")
+      : "The watcher reached Acelynk, but the upload did not complete successfully.";
 
   return {
     title,
@@ -265,7 +302,7 @@ function friendlyErrorSummary(entry: AcelynkLogEntry) {
     partErrors,
     detailLines,
     extractedPayload,
-    fixes: friendlyFixes(entry, details, partErrors),
+    fixes: manifest ? manifestFixes(entry, details) : friendlyFixes(entry, details, partErrors),
   };
 }
 
@@ -398,13 +435,20 @@ function ModuleStatusTable({ resourceType }: { resourceType: ModuleKey }) {
                   </td>
                 </tr>
               )}
-              {rows.map((row) => (
+              {rows.map((row) => {
+                const reason = row.status === "failed" ? (isManifestQuery(row) ? manifestReason(row) : row.error_message) : null;
+                return (
                 <tr key={row.id} className="hover:bg-[#F8FAFC] transition-colors">
                   <td className="px-4 py-3 font-mono text-xs text-[#0369A1] font-semibold whitespace-nowrap">
                     {row.importer_account ?? "—"}
                   </td>
-                  <td className="px-4 py-3 font-mono text-xs text-[#334155] truncate max-w-[260px]">
-                    {row.identifier}
+                  <td className="px-4 py-3 max-w-[260px]">
+                    <p className="font-mono text-xs text-[#334155] truncate">{row.identifier}</p>
+                    {reason && (
+                      <p className="mt-0.5 max-w-[260px] truncate text-xs text-rose-700" title={reason}>
+                        {reason}
+                      </p>
+                    )}
                   </td>
                   <td className="px-4 py-3">
                     <span
@@ -454,7 +498,8 @@ function ModuleStatusTable({ resourceType }: { resourceType: ModuleKey }) {
                     </div>
                   </td>
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -569,7 +614,8 @@ function JobPreviewModal({ entry, kind, onClose }: { entry: AcelynkLogEntry; kin
               resultNeedsVerification ? "text-amber-800" : isResult ? "text-emerald-700" : "text-red-700"
             }`}>
               {manifest
-                ? asString(asRecord(entry.details).safe_response_summary) ?? "The CRM status reflects the observable Manifest Query outcome recorded by the worker."
+                ? (isResult ? asString(asRecord(entry.details).safe_response_summary) : manifestReason(entry))
+                  ?? "The CRM status reflects the observable Manifest Query outcome recorded by the worker."
                 : resultNeedsVerification
                 ? "No final Acelynk screenshot is attached to this log. The fields below are the saved CRM values for that run; reprocess it after the latest parser deploy to confirm what Acelynk actually saved."
                 : isResult

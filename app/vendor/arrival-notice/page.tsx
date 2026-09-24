@@ -275,7 +275,7 @@ export default function E214ManifestQueryPage() {
                 className={`rounded-lg border px-4 py-4 text-left ${source === "isf" ? "border-[#087FA3] bg-cyan-50 ring-1 ring-[#087FA3]" : "border-[#D5E2E5] hover:border-[#87AAB5]"}`}
               >
                 <span className="block text-sm font-bold text-[#203B46]">ISF / MBL already available</span>
-                <span className="mt-1 block text-xs leading-5 text-[#607780]">Enter or paste the MBL from the ISF. Query only; no Header Save.</span>
+                <span className="mt-1 block text-xs leading-5 text-[#607780]">Enter or paste the MBL from the ISF. Runs a Manifest Query only and never creates an E214 Header.</span>
               </button>
               <button
                 type="button"
@@ -375,6 +375,12 @@ export default function E214ManifestQueryPage() {
               <div className="rounded-md bg-[#F4F8F9] px-3 py-3"><dt className="text-[10px] font-bold uppercase text-[#71858D]">Bill of lading number</dt><dd className="mt-1 font-mono text-sm font-bold text-[#203B46]">{canonical.slice(4) || "—"}</dd></div>
             </dl>
 
+            {source === "isf" && (
+              <p role="note" className="mt-4 rounded-md border border-amber-200 bg-amber-50 px-3 py-3 text-sm leading-5 text-amber-950">
+                <strong>Query only.</strong> This request asks AceLynk for the bill status and never creates an E214 Header, even when it succeeds. To create a Header, choose <strong>No ISF — use Arrival Notice</strong> and upload the notice.
+              </p>
+            )}
+
             {mbl && !valid && <p className="mt-3 text-sm text-amber-700">Use four SCAC letters followed by letters or numbers only.</p>}
             {source === "arrival_notice" && extraction && (
               <label className="mt-4 flex items-start gap-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-3 text-sm text-amber-950">
@@ -385,6 +391,11 @@ export default function E214ManifestQueryPage() {
           </section>}
 
           {error && <p role="alert" className="mt-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+          {error && source === "arrival_notice" && extractMbl.isError && (
+            <p className="mt-2 text-xs leading-5 text-[#607780]">
+              If the Arrival Notice cannot be read, send the file to Surfgistics operations so the parser can be updated for this carrier layout. Switching to the ISF option will not create a Header.
+            </p>
+          )}
 
           {source && <div className="mt-6 flex items-center gap-3">
             <button type="submit" disabled={!valid || !arrivalReady || queueQuery.isPending} className="inline-flex items-center gap-2 rounded-md bg-[#087FA3] px-4 py-2.5 text-sm font-bold text-white hover:bg-[#076D8C] disabled:cursor-not-allowed disabled:opacity-50">

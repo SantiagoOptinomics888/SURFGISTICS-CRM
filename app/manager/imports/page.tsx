@@ -60,7 +60,7 @@ export default function ManagerImportsPage() {
       <div className="mb-6 grid gap-3 sm:grid-cols-3">
         <SummaryCard label="Total shipments" value={rows.length} detail="All tracked HBLs" icon={<Ship className="h-5 w-5" />} tone="bg-cyan-50 text-cyan-700" />
         <SummaryCard label="Needs action" value={attentionCount} detail="Open workflow steps or failures" icon={<AlertTriangle className="h-5 w-5" />} tone="bg-amber-50 text-amber-700" />
-        <SummaryCard label="Completed" value={completedCount} detail="Entry filing confirmed" icon={<CheckCircle2 className="h-5 w-5" />} tone="bg-emerald-50 text-emerald-700" />
+        <SummaryCard label="Completed" value={completedCount} detail="Workflow results confirmed" icon={<CheckCircle2 className="h-5 w-5" />} tone="bg-emerald-50 text-emerald-700" />
       </div>
 
       <section className="surface overflow-hidden">
@@ -163,6 +163,8 @@ function statusName(status: string) {
     ftz_automation_pending: "E214 query running",
     ftz_automation_failed: "E214 query needs review",
     ftz_complete: "Complete",
+    ftz_header_saved: "Header saved; prior stages pending",
+    ftz_query_ready: "Manifest ready; header pending",
     domestic_automation_pending: "Domestic approved",
   };
   return labels[status] ?? status.replaceAll("_", " ");
@@ -173,5 +175,5 @@ function stepName(index: number) {
 }
 
 function uniqueDocumentCount(shipment: ImportShipment) {
-  return new Set(shipment.documents.map((document) => document.document_type).filter((type) => ["isf", "commercial_invoice", "packing_list"].includes(type))).size;
+  return new Set(shipment.documents.map((document) => document.document_type).filter((type) => ["isf", "commercial_invoice", "packing_list", "arrival_notice"].includes(type))).size;
 }

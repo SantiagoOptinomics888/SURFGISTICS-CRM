@@ -32,7 +32,7 @@ export const statusLabels: Record<string, string> = {
   isf_automation_pending: "ISF processing",
   isf_automation_failed: "ISF needs team attention",
   isf_review_ready: "ISF ready for review",
-  ftz_complete: "E214 header saved (not customs filed)",
+  ftz_complete: "E214 complete (customs filing is separate)",
   ftz_header_saved: "E214 header saved; earlier stages pending",
   ftz_query_ready: "Manifest report ready; header pending",
   tally_in_review_required: "Tally-in needs team review",
@@ -110,7 +110,7 @@ export function workflowStatuses(shipment: Shipment) {
     : describe(isf.find((value) => value && value !== "success") ?? "queued", "In progress");
   const tally = shipment.automation?.tally_in?.new_documents_require_review ? { status: "Reviewing your new documents", done: false } : describe(state("tally_in"), "Waiting for your invoice and packing list");
   const header = ["ftz_complete", "ftz_header_saved", "domestic_complete"].includes(shipment.status)
-    ? { status: "Header saved — customs filing is handled separately", done: true }
+    ? { status: "Complete — customs filing is handled separately", done: true }
     : describe(state("e214_entry_header"), shipment.documents.some((doc) => doc.document_type === "arrival_notice") ? "Details captured from your arrival notice" : "Waiting for your arrival notice");
   return [
     { label: "ISF filing", ...isfStep },
