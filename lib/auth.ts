@@ -35,7 +35,8 @@ export function isClientAccount(user: Pick<AuthUser, "role" | "permissions">): b
 
 export function roleRedirect(role: string, permissions: string[] = []): string {
   if (role === "manager") return "/manager";
-  return isClientAccount({ role: "vendor", permissions }) ? "/client" : "/vendor";
+  // Vendors with shipment access land in the client portal; the Overview stays one click away.
+  return permissions.includes("imports") ? "/client" : "/vendor";
 }
 
 export function startImpersonation(targetAuth: AuthUser) {

@@ -66,7 +66,7 @@ export default function VendorDashboard() {
   const activeShipments = shipments?.filter((shipment) => !shipment.status.includes("complete")).length ?? 0;
 
   const metrics = [
-    hasPerm("imports") && { label: "Active shipments", value: activeShipments, detail: `${shipments?.length ?? 0} total HBLs`, href: "/vendor/imports", icon: Ship, tone: "text-cyan-700 bg-cyan-50" },
+    hasPerm("imports") && { label: "Active shipments", value: activeShipments, detail: `${shipments?.length ?? 0} total HBLs`, href: "/client", icon: Ship, tone: "text-cyan-700 bg-cyan-50" },
     hasPerm("parts") && { label: "Registered parts", value: parts?.length ?? 0, detail: `$${(parts?.reduce((sum, row) => sum + (row.value ?? 0), 0) ?? 0).toLocaleString()} total value`, href: "/vendor/arts-parts", icon: Boxes, tone: "text-sky-700 bg-sky-50" },
     hasPerm("tally_in") && { label: "Tally-in items", value: tallyIn?.length ?? 0, detail: `${tallyApproved} approved · ${tallyPending} pending`, href: "/vendor/tally-in", icon: ClipboardList, tone: "text-amber-700 bg-amber-50" },
     hasPerm("tally_out") && { label: "Delivery orders", value: new Set(tallyOut?.map((row) => row.delivery_order_no).filter(Boolean)).size, detail: `${tallyOut?.length ?? 0} tally-out rows`, href: "/vendor/tally-out", icon: PackageCheck, tone: "text-emerald-700 bg-emerald-50" },
@@ -74,7 +74,7 @@ export default function VendorDashboard() {
   ].filter((item): item is { label: string; value: number; detail: string; href: string; icon: LucideIcon; tone: string } => Boolean(item));
 
   const quickActions = [
-    hasPerm("imports") && { label: "Upload ISF", detail: "Start Acelynk and GoFreight automatically", href: "/vendor/imports", icon: Ship },
+    hasPerm("imports") && { label: "Start a shipment", detail: "Drop your ISF and documents", href: "/client/new", icon: Ship },
     hasPerm("tally_in") && { label: "Run E214 query", detail: "Queue an MBL Manifest Query in AceLynk", href: "/vendor/e214-manifest-query", icon: FileInput },
     hasPerm("parts") && { label: "Upload parts", detail: "Register or update the parts catalog", href: "/vendor/arts-parts", icon: Boxes },
     hasPerm("tally_in") && { label: "Upload tally in", detail: "Validate parts and submit line items", href: "/vendor/tally-in", icon: Upload },
@@ -83,7 +83,7 @@ export default function VendorDashboard() {
   const activity = [
     ...(parts ?? []).map((row) => ({ id: `part-${row.id}`, label: row.part_number ?? "Part", detail: row.description ?? "Part updated", date: row.created_at, href: "/vendor/arts-parts", type: "Part" })),
     ...(tallyIn ?? []).map((row) => ({ id: `tally-${row.id}`, label: row.hbl ?? "Tally in", detail: row.part ?? "Line item", date: row.created_at, href: "/vendor/tally-in", type: "Tally In" })),
-    ...(shipments ?? []).map((row) => ({ id: `shipment-${row.id}`, label: row.hbl, detail: shipmentStatus[row.status]?.label ?? row.status.replaceAll("_", " "), date: row.updated_at, href: "/vendor/imports", type: "Shipment" })),
+    ...(shipments ?? []).map((row) => ({ id: `shipment-${row.id}`, label: row.hbl, detail: shipmentStatus[row.status]?.label ?? row.status.replaceAll("_", " "), date: row.updated_at, href: `/client?shipment=${encodeURIComponent(row.hbl)}`, type: "Shipment" })),
   ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).slice(0, 7);
 
   return (
@@ -144,11 +144,11 @@ export default function VendorDashboard() {
         </section>
 
         <section>
-          <div className="mb-3 flex items-center justify-between"><h2 className="section-label">Shipment status</h2>{hasPerm("imports") && <Link href="/vendor/imports" className="text-xs font-bold text-[#087FA3]">View all</Link>}</div>
+          <div className="mb-3 flex items-center justify-between"><h2 className="section-label">Shipment status</h2>{hasPerm("imports") && <Link href="/client" className="text-xs font-bold text-[#087FA3]">View all</Link>}</div>
           <div className="surface overflow-hidden divide-y divide-[#E8EFF1]">
             {!hasPerm("imports") || !shipments?.length ? <EmptyState icon={Ship} title="No shipments yet" detail="New shipments will appear here after an ISF is uploaded." /> : shipments.slice(0, 5).map((shipment) => {
               const status = shipmentStatus[shipment.status] ?? { label: shipment.status.replaceAll("_", " "), tone: "bg-slate-100 text-slate-700" };
-              return <Link key={shipment.id} href="/vendor/imports" className="block px-4 py-3.5 hover:bg-[#F7FAFA]"><div className="flex items-center justify-between gap-3"><p className="truncate font-mono text-sm font-bold text-[#203B46]">{shipment.hbl}</p><span className={`flex-shrink-0 rounded-full px-2 py-1 text-[10px] font-bold ${status.tone}`}>{status.label}</span></div><p className="mt-1 text-xs text-[#81949B]">{shipment.documents.length} document{shipment.documents.length === 1 ? "" : "s"} attached</p></Link>;
+              return <Link key={shipment.id} href={`/client?shipment=${encodeURIComponent(shipment.hbl)}`} className="block px-4 py-3.5 hover:bg-[#F7FAFA]"><div className="flex items-center justify-between gap-3"><p className="truncate font-mono text-sm font-bold text-[#203B46]">{shipment.hbl}</p><span className={`flex-shrink-0 rounded-full px-2 py-1 text-[10px] font-bold ${status.tone}`}>{status.label}</span></div><p className="mt-1 text-xs text-[#81949B]">{shipment.documents.length} document{shipment.documents.length === 1 ? "" : "s"} attached</p></Link>;
             })}
           </div>
         </section>

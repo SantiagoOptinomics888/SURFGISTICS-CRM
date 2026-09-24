@@ -37,7 +37,6 @@ export const clientLinks: NavLink[] = [
 export const vendorLinks: NavLink[] = [
   { href: "/client", label: "Client portal", section: "Workspace", icon: Ship, permission: "imports" },
   { href: "/vendor", label: "Overview", section: "Workspace", icon: LayoutDashboard, permission: null },
-  { href: "/vendor/imports", label: "ISF & Shipments", section: "Workspace", icon: Ship, permission: "imports" },
   { href: "/vendor/arts-parts", label: "Parts", section: "Operations", icon: Boxes, permission: "parts" },
   { href: "/vendor/tally-in", label: "Tally In", section: "Operations", icon: ClipboardList, permission: "tally_in" },
   { href: "/vendor/e214-manifest-query", label: "E214 Manifest Query", section: "Operations", icon: FileInput, permission: "tally_in" },

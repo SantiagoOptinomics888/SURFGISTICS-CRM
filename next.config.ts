@@ -1,7 +1,10 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  async redirects() {
+    // Vendor shipments moved to the client portal; keep old links and bookmarks working.
+    return [{ source: "/vendor/imports", destination: "/client", permanent: false }];
+  },
 };
 
 export default nextConfig;

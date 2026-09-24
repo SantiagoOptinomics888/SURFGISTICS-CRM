@@ -56,6 +56,26 @@ test("client sign-in opens shipment portal with only client navigation", async (
   await expect(page.getByRole("link", { name: "Parts", exact: true })).toHaveCount(0);
 });
 
+test("vendor with shipment access lands in the client portal and keeps Overview", async ({ page }) => {
+  await mockApi(page);
+  await page.route("https://api.surfgistics.com/parts", (route) => route.fulfill({ json: [] }));
+  await page.route("https://api.surfgistics.com/ftz_line_item", (route) => route.fulfill({ json: [] }));
+  await page.route("https://api.surfgistics.com/auth/token", (route) => route.fulfill({ json: { ...auth, permissions: ["parts", "tally_in", "imports"] } }));
+  await page.goto("/login");
+  await page.getByLabel("Email address").fill(auth.email);
+  await page.getByLabel("Password", { exact: true }).fill("test-password");
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
+  await expect(page).toHaveURL(/\/client$/);
+  const nav = page.locator("aside");
+  await expect(nav.getByRole("link", { name: "Client portal", exact: true })).toBeVisible();
+  await expect(nav.getByRole("link", { name: "Overview", exact: true })).toBeVisible();
+  await expect(nav.getByRole("link", { name: "ISF & Shipments", exact: true })).toHaveCount(0);
+  await page.goto("/vendor/imports");
+  await expect(page).toHaveURL(/\/client$/);
+  await page.goto("/vendor");
+  await expect(page.getByRole("link", { name: /Start a shipment/ }).first()).toHaveAttribute("href", "/client/new");
+});
+
 test("client creates shipment by dropping documents only, then adds more and downloads", async ({ page }) => {
   await loginState(page);
   const state = await mockApi(page, false);
