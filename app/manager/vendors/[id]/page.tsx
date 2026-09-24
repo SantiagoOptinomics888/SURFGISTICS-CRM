@@ -247,6 +247,14 @@ export default function VendorDetailPage({ params }: { params: Promise<{ id: str
               </span>
             )}
           </div>
+          <div className="mt-2 flex flex-wrap gap-2 text-xs">
+            <span className={`rounded border px-2 py-1 font-medium ${data.firms_code && data.ftz_zone_id ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-amber-200 bg-amber-50 text-amber-700"}`}>
+              {data.firms_code && data.ftz_zone_id ? "Legacy E214 setup ready" : "Legacy E214 defaults not set"}
+            </span>
+            <span className="rounded border border-[#E2E8F0] bg-white px-2 py-1 font-mono text-[#475569]">FIRMS: {data.firms_code ?? "—"}</span>
+            <span className="rounded border border-[#E2E8F0] bg-white px-2 py-1 font-mono text-[#475569]">Zone: {data.ftz_zone_id ?? "—"}</span>
+            {data.default_port_code && <span className="rounded border border-[#E2E8F0] bg-white px-2 py-1 font-mono text-[#475569]">Port: {data.default_port_code}</span>}
+          </div>
         </div>
       </div>
 
@@ -491,6 +499,9 @@ export default function VendorDetailPage({ params }: { params: Promise<{ id: str
         onClose={() => setAcelynkOpen(false)}
         hbls={ftzHbls}
         importerAccount={data.importer_account ?? ""}
+        defaultZoneId={data.ftz_zone_id ?? ""}
+        defaultFirmsCode={data.firms_code ?? ""}
+        defaultPortCode={data.default_port_code ?? ""}
       />
     </div>
   );

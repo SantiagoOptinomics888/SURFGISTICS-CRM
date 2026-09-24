@@ -27,7 +27,7 @@ export default function LoginPage() {
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
       });
       saveAuth({ email, role: data.role, importer_account: data.importer_account, access_token: data.access_token, permissions: data.permissions ?? [] });
-      router.push(roleRedirect(data.role));
+      router.push(roleRedirect(data.role, data.permissions ?? []));
     } catch (err: unknown) {
       const status = err && typeof err === "object" && "response" in err
         ? (err as { response?: { status?: number } }).response?.status

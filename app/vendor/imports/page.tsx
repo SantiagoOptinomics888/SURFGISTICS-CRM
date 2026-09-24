@@ -28,7 +28,7 @@ const statusLabels: Record<string, string> = {
   awaiting_documents: "Awaiting client documents",
   documents_ready: "Documents ready",
   awaiting_classification: "Awaiting classification",
-  ftz_automation_pending: "E214 queued",
+  ftz_automation_pending: "E214 Manifest Query queued",
   domestic_automation_pending: "7501 pending Phase 2",
 };
 

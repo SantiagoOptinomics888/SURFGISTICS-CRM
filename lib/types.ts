@@ -87,6 +87,11 @@ export interface VendorDetail {
   id: number;
   email: string;
   importer_account: string | null;
+  firms_code: string | null;
+  ftz_zone_id: string | null;
+  default_port_code: string | null;
+  use_ai_isf_extraction: boolean;
+  use_ai_e214_extraction: boolean;
   is_active: boolean;
   role: string;
   record_counts: RecordCounts;
@@ -101,6 +106,11 @@ export interface AdminUser {
   email: string;
   role: string;
   importer_account: string | null;
+  firms_code: string | null;
+  ftz_zone_id: string | null;
+  default_port_code: string | null;
+  use_ai_isf_extraction: boolean;
+  use_ai_e214_extraction: boolean;
   is_active: boolean;
   permissions: string[];
   created_at: string;
@@ -158,8 +168,54 @@ export interface AcelynkLogEntry {
   resource_type: AcelynkResource;
   importer_account: string | null;
   identifier: string;
+  query_fingerprint: string | null;
   status: AcelynkStatus;
   error_message: string | null;
   details: Record<string, unknown>;
   retried_count: number;
+}
+
+export interface ShipmentDocument {
+  id: number;
+  created_at: string;
+  document_type: string;
+  file_name: string;
+  content_type: string;
+  file_size: number;
+  source: string;
+  uploaded_by_email: string | null;
+  extracted_data: Record<string, unknown>;
+}
+
+export interface ShipmentEvent {
+  id: number;
+  created_at: string;
+  event_type: string;
+  title: string;
+  description: string | null;
+  actor_email: string | null;
+  details: Record<string, unknown>;
+}
+
+export interface ImportShipment {
+  id: number;
+  created_at: string;
+  updated_at: string;
+  hbl: string;
+  importer_account: string | null;
+  client_email: string | null;
+  client_delivery_address: Record<string, string | null>;
+  shipment_type: string | null;
+  classification_source: string | null;
+  status: string;
+  created_by_email: string | null;
+  isf_uploaded_at: string | null;
+  isf_processed_at: string | null;
+  document_request_due_at: string | null;
+  document_request_sent_at: string | null;
+  approved_at: string | null;
+  approved_by_email: string | null;
+  automation: Record<string, Record<string, unknown>>;
+  documents: ShipmentDocument[];
+  events: ShipmentEvent[];
 }

@@ -28,8 +28,14 @@ export function clearAuth() {
   localStorage.removeItem("shadow_user");
 }
 
-export function roleRedirect(role: string): string {
-  return role === "manager" ? "/manager" : "/vendor";
+export function isClientAccount(user: Pick<AuthUser, "role" | "permissions">): boolean {
+  const permissions = user.permissions ?? [];
+  return user.role === "vendor" && permissions.length === 1 && permissions.includes("imports");
+}
+
+export function roleRedirect(role: string, permissions: string[] = []): string {
+  if (role === "manager") return "/manager";
+  return isClientAccount({ role: "vendor", permissions }) ? "/client" : "/vendor";
 }
 
 export function startImpersonation(targetAuth: AuthUser) {

@@ -84,7 +84,12 @@ export default function VendorsPage() {
                     <span className="text-sm font-medium text-[#0F172A] truncate">{v.email}</span>
                   </div>
                   {/* Account */}
-                  <div className="col-span-2 text-xs font-mono text-[#64748B]">{v.importer_account ?? "—"}</div>
+                  <div className="col-span-2 text-xs text-[#64748B]">
+                    <p className="font-mono">{v.importer_account ?? "—"}</p>
+                    <p className={`mt-1 font-medium ${v.firms_code && v.ftz_zone_id ? "text-emerald-700" : "text-amber-700"}`}>
+                      {v.firms_code && v.ftz_zone_id ? `${v.firms_code} · ${v.ftz_zone_id}` : "Legacy E214 defaults not set"}
+                    </p>
+                  </div>
                   {/* Status */}
                   <div className="col-span-1">
                     <span className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full ${

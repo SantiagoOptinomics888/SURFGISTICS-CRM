@@ -15,7 +15,7 @@ const MODULES: { key: ModuleKey; label: string; automated: boolean }[] = [
   { key: "isf_gofreight", label: "ISF · GoFreight", automated: true },
   { key: "parts", label: "Parts", automated: true },
   { key: "ftz_line_item", label: "Tally In", automated: true },
-  { key: "e214_entry_header", label: "E214 Entry Header", automated: true },
+  { key: "e214_entry_header", label: "E214 Manifest Query", automated: true },
   { key: "inbond", label: "In-Bonds", automated: false },
   { key: "tally_out", label: "Tally Out", automated: false },
 ];
@@ -23,7 +23,7 @@ const MODULES: { key: ModuleKey; label: string; automated: boolean }[] = [
 const MODULE_KEYS = new Set<ModuleKey>(MODULES.map((module) => module.key));
 
 function moduleFromParam(value: string | null): ModuleKey {
-  return value && MODULE_KEYS.has(value as ModuleKey) ? (value as ModuleKey) : "parts";
+  return value && MODULE_KEYS.has(value as ModuleKey) ? (value as ModuleKey) : MODULES[0].key;
 }
 
 const STATUS_STYLES: Record<string, string> = {
@@ -40,9 +40,92 @@ const STATUS_DOTS: Record<string, string> = {
 
 const STATUS_LABELS: Record<string, string> = {
   pending: "Pending",
-  success: "Sent",
+  success: "Approved",
   failed: "Failed",
 };
+
+function isManifestQuery(entry: AcelynkLogEntry) {
+  return asString(asRecord(entry.details).source) === "e214_manifest_query";
+}
+
+function canRetryQueryReader(entry: AcelynkLogEntry) {
+  const d = asRecord(entry.details), m = asRecord(d.manifest_query_action);
+  const missing = asRecord(d.e214_header_payload).missing_fields;
+  return entry.status === "failed" && isManifestQuery(entry)
+    && d.workflow_state === "CRM-MQ-HUMAN-TAKEOVER"
+    && d.error_category === "manifest_candidate_selection_unresolved"
+    && Array.isArray(missing) && missing.includes("ambiguous_shipment_record")
+    && m.decision_id === "D-006" && m.state === "activation_may_have_occurred" && m.activation_count === 1
+    && !!d.submitted_at_utc && !d.history_result_recovery
+    && !d.e214_header_save_action && !d.e214_header_save_result;
+}
+
+function canRetrySaveControl(entry: AcelynkLogEntry) {
+  const d = asRecord(entry.details), m = asRecord(d.e214_header_save_action), r = asRecord(d.e214_header_save_result);
+  return entry.status === "failed" && isManifestQuery(entry)
+    && entry.error_message === "AceLynk must expose one visible, enabled Header Save control; Save was not activated."
+    && m.state === "authorized_unconsumed" && m.activation_count === 0
+    && r.save_activation_count === 0 && r.browser_save_activation_count === 0
+    && r.save_may_have_occurred === false && !d.header_save_control_retry;
+}
+
+function canRetryHeaderSearch(entry: AcelynkLogEntry) {
+  const d = asRecord(entry.details), marker = asRecord(d.e214_header_save_action), result = asRecord(d.e214_header_save_result);
+  return entry.status === "failed" && isManifestQuery(entry)
+    && d.workflow_state === "CRM-E214-HEADER-VALIDATION-FAILED"
+    && [
+      "AceLynk Find did not return one matching record or an explicit completed empty result; duplicate absence is unverified.",
+      "Bill Information Save did not produce one bill row with the expected bill and quantity in their labeled columns; Header Save was not attempted.",
+    ].includes(entry.error_message || "")
+    && marker.state === "authorized_unconsumed" && marker.activation_count === 0
+    && result.save_activation_count === 0 && result.browser_save_activation_count === 0
+    && result.save_may_have_occurred === false && result.e214_submit_activation_count === 0
+    && !d.e214_header_pre_save_retry;
+}
+
+function canRetryHeaderValidation(entry: AcelynkLogEntry) {
+  const d = asRecord(entry.details);
+  return entry.status === "failed" && isManifestQuery(entry)
+    && d.workflow_state === "CRM-E214-HEADER-VALIDATION-FAILED"
+    && d.e214_header_error_category === "query_payload_not_ready_for_header"
+    && d.result_class === "result_available"
+    && asRecord(d.e214_header_save_intent).source === "arrival_notice_upload"
+    && asRecord(d.e214_header_payload).status === "ready"
+    && !d.e214_header_save_action && !d.e214_header_save_result
+    && !d.e214_header_save_may_have_occurred && !d.e214_submit_may_have_occurred;
+}
+
+function manifestStatusLabel(entry: AcelynkLogEntry) {
+  const state = asString(asRecord(entry.details).workflow_state) || "";
+  if (entry.status === "failed" || /FAILED|REJECTED|NO-MATCH|OUTCOME-UNKNOWN|HUMAN-TAKEOVER/.test(state)) {
+    return "Needs attention";
+  }
+  if (state.endsWith("IN-PROGRESS")) return "Processing";
+  if (state.endsWith("READY")) return "Queued";
+  if (entry.status === "success") return "Completed";
+  return entry.status === "pending" ? "Queued" : "Needs attention";
+}
+
+function manifestWorkflowLabel(entry: AcelynkLogEntry) {
+  const state = asString(asRecord(entry.details).workflow_state);
+  const labels: Record<string, string> = {
+    "CRM-MQ-READY": "Queued",
+    "CRM-E214-HEADER-READY": "Header queued",
+    "CRM-E214-HEADER-IN-PROGRESS": "Saving header",
+    "CRM-E214-HEADER-VALIDATION-FAILED": "Header validation failed",
+    "CRM-E214-HEADER-SAVED": "Header saved",
+    "CRM-E214-HEADER-EXISTING-VERIFIED": "Existing header verified",
+    "CRM-MQ-IN-PROGRESS": "Running",
+    "CRM-MQ-RESULT-AVAILABLE": "Report ready",
+    "CRM-MQ-NO-MATCH": "No match",
+    "CRM-MQ-REJECTED": "Rejected",
+    "CRM-MQ-OUTCOME-UNKNOWN": "Needs review",
+    "CRM-MQ-HUMAN-TAKEOVER": "Human takeover",
+    "CRM-MQ-SKIPPED-EXISTING": "Already queried",
+    "CRM-MQ-VALIDATION-FAILED": "Invalid MBL",
+  };
+  return state ? labels[state] ?? state.replaceAll("CRM-MQ-", "").replaceAll("-", " ") : STATUS_LABELS[entry.status] ?? entry.status;
+}
 
 function formatRelative(iso: string): string {
   const d = new Date(iso);
@@ -188,7 +271,7 @@ function friendlyErrorSummary(entry: AcelynkLogEntry) {
 
 export default function ModulesPage() {
   const searchParams = useSearchParams();
-  const requestedModule = moduleFromParam(searchParams.get("module"));
+  const requestedModule = moduleFromParam(searchParams?.get("module") ?? null);
   const [activeTab, setActiveTab] = useState<ModuleKey>(requestedModule);
   const activeModule = MODULES.find((m) => m.key === activeTab)!;
 
@@ -246,7 +329,21 @@ function ModuleStatusTable({ resourceType }: { resourceType: ModuleKey }) {
   });
 
   const reprocess = useMutation({
-    mutationFn: (id: number) => api.post(`/manager/acelynk-log/${id}/reprocess`),
+    mutationFn: (id: number) => {
+      const entry = data?.find((row) => row.id === id);
+      if (entry && canRetryQueryReader(entry)) {
+        return api.post(`/manager/acelynk-log/${id}/history-result-recovery`, {
+          decision_id: "D-031", manual_reconciliation_confirmed: true,
+          authorized_log_id: id, authorized_action: "Read existing Manifest Query History result",
+        });
+      }
+      return entry && canRetryHeaderSearch(entry)
+        ? api.post(`/manager/acelynk-log/${id}/retry-e214-header-pre-save`, {
+            decision_id: "D-035", manual_reconciliation_confirmed: true,
+            authorized_log_id: id, authorized_action: "Retry E214 Header pre-save validation",
+          })
+        : api.post(`/manager/acelynk-log/${id}/reprocess`);
+    },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["acelynk-log", resourceType] }),
   });
 
@@ -276,6 +373,8 @@ function ModuleStatusTable({ resourceType }: { resourceType: ModuleKey }) {
 
   return (
     <>
+      {reprocess.isError && <p role="alert" className="mb-3 text-sm text-red-600">{String((reprocess.error as { response?: { data?: { detail?: string } } })?.response?.data?.detail || "Could not retry this job. Refresh and try again.")}</p>}
+      {reprocess.isSuccess && <p role="status" className="mb-3 text-sm text-emerald-700">Job queued using its saved upload data.</p>}
       <div className="bg-white border border-[#E2E8F0] rounded-lg overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -314,7 +413,7 @@ function ModuleStatusTable({ resourceType }: { resourceType: ModuleKey }) {
                       }`}
                     >
                       <span className={`w-1.5 h-1.5 rounded-full ${STATUS_DOTS[row.status] ?? "bg-[#94A3B8]"}`} />
-                      {STATUS_LABELS[row.status] ?? row.status}
+                      {row.resource_type === "e214_entry_header" ? manifestStatusLabel(row) : STATUS_LABELS[row.status] ?? row.status}
                     </span>
                   </td>
                   <td className="px-4 py-3 text-xs text-[#475569] whitespace-nowrap">
@@ -343,13 +442,13 @@ function ModuleStatusTable({ resourceType }: { resourceType: ModuleKey }) {
                           {hasScreenshotReference(asRecord(row.details), "result") ? "View result" : "View details"}
                         </button>
                       )}
-                      {row.status === "failed" && (
+                      {row.status === "failed" && (!isManifestQuery(row) || canRetryHeaderValidation(row) || canRetryHeaderSearch(row) || canRetrySaveControl(row) || canRetryQueryReader(row)) && (
                         <button
                           onClick={() => reprocess.mutate(row.id)}
                           disabled={reprocess.isPending}
                           className="text-xs font-medium px-2.5 py-1 rounded bg-[#0369A1] text-white hover:bg-[#0284C7] transition-colors cursor-pointer disabled:opacity-50"
                         >
-                          {reprocess.isPending ? "…" : "Reprocess"}
+                          {reprocess.isPending ? "…" : isManifestQuery(row) ? "Retry" : "Reprocess"}
                         </button>
                       )}
                     </div>
@@ -383,8 +482,10 @@ function JobPreviewModal({ entry, kind, onClose }: { entry: AcelynkLogEntry; kin
   const [showTechnicalDetails, setShowTechnicalDetails] = useState(false);
   const summary = friendlyErrorSummary(entry);
   const detailsForDisplay = redactEmbeddedData(entry.details ?? {});
+  const manifestQuery = asRecord(asRecord(entry.details).manifest_query);
+  const manifest = isManifestQuery(entry);
   const isResult = kind === "result";
-  const resultNeedsVerification = isResult && screenshotState === "missing";
+  const resultNeedsVerification = isResult && screenshotState === "missing" && !manifest;
 
   useEffect(() => {
     let active = true;
@@ -458,14 +559,18 @@ function JobPreviewModal({ entry, kind, onClose }: { entry: AcelynkLogEntry; kin
             <p className={`text-sm font-semibold ${
               resultNeedsVerification ? "text-amber-800" : isResult ? "text-emerald-800" : "text-red-800"
             }`}>
-              {resultNeedsVerification
+              {manifest
+                ? manifestWorkflowLabel(entry)
+                : resultNeedsVerification
                 ? "Watcher marked this complete, but verification is missing"
                 : isResult ? "Acelynk watcher completed successfully" : summary.title}
             </p>
             <p className={`mt-1 text-sm ${
               resultNeedsVerification ? "text-amber-800" : isResult ? "text-emerald-700" : "text-red-700"
             }`}>
-              {resultNeedsVerification
+              {manifest
+                ? asString(asRecord(entry.details).safe_response_summary) ?? "The CRM status reflects the observable Manifest Query outcome recorded by the worker."
+                : resultNeedsVerification
                 ? "No final Acelynk screenshot is attached to this log. The fields below are the saved CRM values for that run; reprocess it after the latest parser deploy to confirm what Acelynk actually saved."
                 : isResult
                   ? "The final Acelynk screen captured by the watcher is shown below."
@@ -473,7 +578,7 @@ function JobPreviewModal({ entry, kind, onClose }: { entry: AcelynkLogEntry; kin
             </p>
           </div>
 
-          {!isResult && (
+          {!isResult && !manifest && (
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-[#E2E8F0] bg-white px-4 py-3">
             <div>
               <p className="text-sm font-semibold text-[#0F172A]">Need to correct the upload?</p>
@@ -497,6 +602,24 @@ function JobPreviewModal({ entry, kind, onClose }: { entry: AcelynkLogEntry; kin
               {downloadState === "downloading" ? "Preparing..." : "Download upload file"}
             </button>
           </div>
+          )}
+
+          {manifest && (
+            <div className="rounded-lg border border-[#E2E8F0] bg-white p-4">
+              <p className="text-xs font-semibold uppercase tracking-wider text-[#334155]">Manifest Query settings</p>
+              <dl className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {([
+                  ["MBL", manifestQuery.mbl ?? entry.identifier],
+                  ["SCAC", manifestQuery.scac],
+                  ["Bill number", manifestQuery.bill_of_lading_number],
+                  ["Query", manifestQuery.query_type],
+                  ["Related bills", manifestQuery.get_related_house_master_bills ? "Checked" : "Not checked"],
+                  ["Ace Query", manifestQuery.ace_query ? "Checked" : "Not checked"],
+                ] as [string, unknown][]).map(([label, value]) => (
+                  <div key={label}><dt className="text-xs font-medium text-[#64748B]">{label}</dt><dd className="mt-1 truncate text-sm text-[#0F172A]">{value ? String(value) : "—"}</dd></div>
+                ))}
+              </dl>
+            </div>
           )}
 
           {Object.keys(summary.extractedPayload).length > 0 && (

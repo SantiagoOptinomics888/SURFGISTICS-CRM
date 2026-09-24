@@ -10,7 +10,7 @@ export default function HomePage() {
   useEffect(() => {
     const user = getAuth();
     if (user) {
-      router.replace(roleRedirect(user.role));
+      router.replace(roleRedirect(user.role, user.permissions));
     } else {
       router.replace("/login");
     }

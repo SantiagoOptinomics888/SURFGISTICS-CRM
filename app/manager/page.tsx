@@ -72,7 +72,7 @@ const resourceLabels: Record<string, string> = {
   isf_gofreight: "ISF · GoFreight",
   parts: "Parts",
   ftz_line_item: "Tally In",
-  e214_entry_header: "E214 Entry Header",
+  e214_entry_header: "E214 Manifest Query",
   inbond: "In-Bond",
   tally_out: "Tally Out",
 };
@@ -94,6 +94,13 @@ function timeAgo(dateStr: string | null) {
   const days = Math.floor(hours / 24);
   if (days < 7) return `${days}d ago`;
   return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
+function failureReason(log: AcelynkLogEntry): string | null {
+  const details = (log.details ?? {}) as Record<string, unknown>;
+  const summary = details.safe_error_summary;
+  if (typeof summary === "string" && summary.trim()) return summary;
+  return log.error_message?.trim() ? log.error_message : null;
 }
 
 function statusTone(status: AcelynkLogEntry["status"]) {
@@ -200,7 +207,17 @@ export default function ManagerDashboard() {
 
   const HealthIcon = health.icon;
   const shipmentAttention = (importShipments ?? []).filter((shipment) =>
-    ["isf_automation_pending", "awaiting_documents", "awaiting_classification"].includes(shipment.status)
+    [
+      "isf_automation_pending",
+      "isf_automation_failed",
+      "isf_review_ready",
+      "awaiting_documents",
+      "documents_ready",
+      "awaiting_classification",
+      "ftz_automation_pending",
+      "ftz_automation_failed",
+      "domestic_automation_pending",
+    ].includes(shipment.status)
   );
 
   return (
@@ -430,6 +447,9 @@ export default function ManagerDashboard() {
                         <span className="text-xs text-[#64748B]">{resourceLabels[log.resource_type] ?? log.resource_type}</span>
                       </div>
                       <p className="text-sm font-medium text-[#020617] truncate mt-1">{log.identifier}</p>
+                      {log.status === "failed" && failureReason(log) && (
+                        <p className="text-xs text-rose-700 truncate mt-0.5" title={failureReason(log) ?? undefined}>{failureReason(log)}</p>
+                      )}
                       <p className="text-xs text-[#94A3B8] mt-0.5">{log.importer_account ?? "No account"} · {timeAgo(log.created_at)}</p>
                     </div>
                   </Link>

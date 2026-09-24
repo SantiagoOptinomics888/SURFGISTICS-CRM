@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
+import Link from "next/link";
 import { api } from "@/lib/api";
 import { getAuth } from "@/lib/auth";
 import { PageHeader } from "@/components/ui/page-header";
@@ -9,7 +10,7 @@ import { PageHeader } from "@/components/ui/page-header";
 const ALL_RESOURCE_TYPES = [
   { value: "parts", label: "Parts", permission: "parts" },
   { value: "ftz_line_item", label: "Tally In", permission: "tally_in" },
-  { value: "e214_entry_header", label: "E214 Entry Header", permission: "tally_in" },
+  { value: "e214_entry_header", label: "E214 Manifest Query", permission: "tally_in" },
   { value: "inbond", label: "In-Bond", permission: "inbond" },
   { value: "tally_out", label: "Tally Out", permission: "tally_out" },
 ] as const;
@@ -59,34 +60,17 @@ export default function UploadPage() {
 
   const isTallyIn = resourceType === "ftz_line_item";
   const isE214 = resourceType === "e214_entry_header";
+  const canonicalMbl = hbl.replace(/\s+/g, "").toUpperCase();
+  const manifestMblValid = /^[A-Z]{4}[A-Z0-9]+$/.test(canonicalMbl);
   const hblValid = !isTallyIn || hbl.trim().length > 0;
-  const acceptedExtensions = isE214 ? ".pdf,.txt,.csv,.xlsx" : ".csv,.xlsx";
+  const acceptedExtensions = ".csv,.xlsx";
 
   const mutation = useMutation({
     mutationFn: async () => {
+      if (isE214) throw new Error("Use the dedicated E214 Manifest Query page.");
       if (!file) throw new Error("No file selected");
       const form = new FormData();
       form.append("file", file);
-      if (isE214) {
-        const res = await api.post("/upload/arrival-notice/e214", form, {
-          headers: { "Content-Type": "multipart/form-data" },
-        });
-        const missingFields = res.data.missing_fields ?? [];
-        return {
-          created: missingFields.length > 0 ? 0 : 1,
-          errors: missingFields.length > 0
-            ? [`Arrival notice is missing required fields: ${missingFields.join(", ")}`]
-            : [],
-          message: missingFields.length > 0
-            ? "Arrival notice was saved, but it needs correction before Acelynk can run."
-            : "Arrival notice received. The E214 Entry Header job is queued for Acelynk.",
-          logId: res.data.log_id,
-          identifier: res.data.identifier,
-          importerAccount: res.data.importer_account,
-          extracted: res.data.extracted,
-          missingFields,
-        } as UploadResult;
-      }
       const params = isTallyIn ? `?hbl=${encodeURIComponent(hbl.trim())}` : "";
       const res = await api.post(`/upload/${resourceType}${params}`, form, {
         headers: { "Content-Type": "multipart/form-data" },
@@ -96,6 +80,7 @@ export default function UploadPage() {
     onSuccess: (data) => {
       setResult(data);
       setFile(null);
+      if (isE214) setHbl("");
     },
     onError: (err: unknown) => {
       const resp = err && typeof err === "object" && "response" in err
@@ -114,9 +99,9 @@ export default function UploadPage() {
   function handleFile(f: File | undefined) {
     if (!f) return;
     const ext = f.name.split(".").pop()?.toLowerCase();
-    const allowed = isE214 ? ["pdf", "txt", "csv", "xlsx"] : ["csv", "xlsx"];
+      const allowed = ["csv", "xlsx"];
     if (!ext || !allowed.includes(ext)) {
-      setResult({ created: 0, errors: [`File must be ${isE214 ? ".pdf, .txt, .csv, or .xlsx" : ".csv or .xlsx"}`] });
+      setResult({ created: 0, errors: ["File must be .csv or .xlsx"] });
       return;
     }
     setFile(f);
@@ -162,29 +147,38 @@ export default function UploadPage() {
         </div>
       ) : (
         <div className="mb-6 rounded-lg border border-[#E2E8F0] bg-white px-4 py-3">
-          <p className="text-sm font-semibold text-[#0F172A]">Upload an arrival notice</p>
+          <p className="text-sm font-semibold text-[#0F172A]">Run an AceLynk Manifest Query</p>
           <p className="mt-1 text-sm text-[#64748B]">
-            The CRM will extract the E214 Entry Header details and queue the Acelynk automation.
+            Use the dedicated{" "}
+            <Link href="/vendor/e214-manifest-query" className="font-semibold text-[#0369A1] underline underline-offset-2">
+              E214 Manifest Query page
+            </Link>{" "}
+            to enter an ISF MBL or upload and confirm an Arrival Notice.
           </p>
         </div>
       )}
 
-      {/* HBL input for Tally In */}
+      {/* HBL / MBL input */}
       {isTallyIn && (
         <div className="mb-6">
-          <label className="block text-xs font-medium text-[#334155] mb-2">HBL Number <span className="text-red-500">*</span></label>
+          <label className="block text-xs font-medium text-[#334155] mb-2">{isE214 ? "Master Bill of Lading (MBL)" : "HBL Number"} <span className="text-red-500">*</span></label>
           <input
             type="text"
             value={hbl}
             onChange={(e) => { setHbl(e.target.value); setResult(null); }}
-            placeholder="Enter HBL number (e.g. TAL-20260501-A)"
+            placeholder={isE214 ? "OOLU12345678" : "Enter HBL number (e.g. TAL-20260501-A)"}
             className="w-full max-w-md px-3 py-2 rounded-md border border-[#E2E8F0] text-sm text-[#0F172A] placeholder:text-[#94A3B8] focus:outline-none focus:ring-2 focus:ring-[#0369A1] focus:border-transparent"
           />
+          {isE214 && hbl && (
+            <p className={`mt-2 text-xs ${manifestMblValid ? "text-emerald-700" : "text-amber-700"}`}>
+              {manifestMblValid ? `SCAC ${canonicalMbl.slice(0, 4)} · Bill ${canonicalMbl.slice(4)}` : "Use four SCAC letters followed by letters or numbers only."}
+            </p>
+          )}
         </div>
       )}
 
       {/* Drop zone — only show after HBL is entered for Tally In */}
-      {hblValid && (
+      {!isE214 && hblValid && (
         <div
           onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
           onDragLeave={() => setDragOver(false)}
@@ -220,7 +214,7 @@ export default function UploadPage() {
               </svg>
               <p className="text-sm font-medium text-[#334155]">Drop your file here or click to browse</p>
               <p className="text-xs text-[#94A3B8] mt-1">
-                Supports {isE214 ? ".pdf, .txt, .csv, and .xlsx arrival notices" : ".csv and .xlsx"} ({isE214 ? "max 15MB" : "max 10MB"})
+                Supports .csv and .xlsx (max 10MB)
               </p>
             </div>
           )}
@@ -228,14 +222,14 @@ export default function UploadPage() {
       )}
 
       {/* Upload button */}
-      {file && (
+      {!isE214 && file && (
         <div className="mt-4 flex items-center gap-3">
           <button
             onClick={() => mutation.mutate()}
             disabled={mutation.isPending || !hblValid}
             className="px-5 py-2.5 rounded-md bg-[#0369A1] hover:bg-[#0284C7] text-white text-sm font-semibold transition-colors cursor-pointer disabled:opacity-50"
           >
-            {mutation.isPending ? "Uploading..." : isE214 ? "Queue E214 Entry Header" : `Upload to ${RESOURCE_TYPES.find((r) => r.value === resourceType)?.label}`}
+            {mutation.isPending ? "Uploading..." : `Upload to ${RESOURCE_TYPES.find((r) => r.value === resourceType)?.label}`}
           </button>
           <button
             onClick={() => { setFile(null); setResult(null); }}
@@ -259,18 +253,14 @@ export default function UploadPage() {
           )}
           {result.extracted && (
             <div className="rounded-lg border border-[#E2E8F0] bg-white p-4">
-              <p className="text-sm font-semibold text-[#0F172A]">Extracted E214 details</p>
+              <p className="text-sm font-semibold text-[#0F172A]">{isE214 ? "E214 manifest query" : "Upload details"}</p>
               <dl className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 {([
-                  ["HBL", result.identifier],
+                  [isE214 ? "MBL" : "Identifier", result.identifier],
                   ["Account", result.importerAccount],
-                  ["Arrival date", result.extracted.arrival_date],
-                  ["Carrier", result.extracted.carrier_id],
-                  ["Voyage", result.extracted.voyage_flight],
-                  ["FIRMS", result.extracted.firms],
-                  ["Port code", result.extracted.port_code],
-                  ["Container", result.extracted.container_number],
-                  ["Gross weight", result.extracted.gross_weight],
+                  [isE214 ? "SCAC" : "Status", isE214 ? result.extracted.scac : result.extracted.status],
+                  [isE214 ? "Bill number" : "Rows", isE214 ? result.extracted.bill_of_lading_number : result.created],
+                  [isE214 ? "Query type" : "", isE214 ? result.extracted.query_type : ""],
                 ] as [string, unknown][]).map(([label, value]) => (
                   <div key={label} className="min-w-0">
                     <dt className="text-xs font-medium text-[#64748B]">{label}</dt>

@@ -9,6 +9,9 @@ interface AcelynkModalProps {
   onClose: () => void;
   hbls: string[];
   importerAccount: string;
+  defaultZoneId?: string;
+  defaultFirmsCode?: string;
+  defaultPortCode?: string;
 }
 
 interface TallyInPayload {
@@ -38,14 +41,22 @@ interface TallyInPayload {
 
 const currentYear = new Date().getFullYear().toString();
 
-export function AcelynkModal({ open, onClose, hbls, importerAccount }: AcelynkModalProps) {
+export function AcelynkModal({
+  open,
+  onClose,
+  hbls,
+  importerAccount,
+  defaultZoneId = "",
+  defaultFirmsCode = "",
+  defaultPortCode = "",
+}: AcelynkModalProps) {
   const [mode, setMode] = useState<"form" | "preview" | "result">("form");
   const [previewData, setPreviewData] = useState<object | null>(null);
 
   const [form, setForm] = useState({
-    zone_id: "",
-    port_code: "",
-    firms_code: "",
+    zone_id: defaultZoneId,
+    port_code: defaultPortCode,
+    firms_code: defaultFirmsCode,
     admission_num: "",
     admission_type: "06",
     calendar_year: currentYear,

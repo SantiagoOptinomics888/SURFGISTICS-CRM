@@ -17,7 +17,7 @@ import {
   Users,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import { clearAuth, getAuth } from "@/lib/auth";
+import { clearAuth, getAuth, isClientAccount } from "@/lib/auth";
 import { cn } from "@/lib/utils";
 import { BrandLogo } from "@/components/brand-logo";
 
@@ -29,12 +29,18 @@ export type NavLink = {
   permission?: string | null;
 };
 
+export const clientLinks: NavLink[] = [
+  { href: "/client", label: "My shipments", section: "Client portal", icon: Ship },
+  { href: "/client/new", label: "Start a shipment", section: "Client portal", icon: UploadCloud },
+];
+
 export const vendorLinks: NavLink[] = [
+  { href: "/client", label: "Client portal", section: "Workspace", icon: Ship, permission: "imports" },
   { href: "/vendor", label: "Overview", section: "Workspace", icon: LayoutDashboard, permission: null },
   { href: "/vendor/imports", label: "ISF & Shipments", section: "Workspace", icon: Ship, permission: "imports" },
   { href: "/vendor/arts-parts", label: "Parts", section: "Operations", icon: Boxes, permission: "parts" },
   { href: "/vendor/tally-in", label: "Tally In", section: "Operations", icon: ClipboardList, permission: "tally_in" },
-  { href: "/vendor/arrival-notice", label: "Arrival Notices", section: "Operations", icon: FileInput, permission: "tally_in" },
+  { href: "/vendor/e214-manifest-query", label: "E214 Manifest Query", section: "Operations", icon: FileInput, permission: "tally_in" },
   { href: "/vendor/inbonds", label: "In-Bond", section: "Operations", icon: UploadCloud, permission: "inbond" },
   { href: "/vendor/tally-out", label: "Tally Out", section: "Operations", icon: CheckCircle2, permission: "tally_out" },
 ];
@@ -51,6 +57,7 @@ export const managerLinks: NavLink[] = [
 export function linksForCurrentUser() {
   const user = getAuth();
   const permissions = user?.permissions ?? [];
+  if (user && isClientAccount(user)) return clientLinks;
   return user?.role === "manager"
     ? managerLinks
     : vendorLinks.filter((link) => link.permission === null || !link.permission || permissions.includes(link.permission));
@@ -81,7 +88,7 @@ export default function Sidebar() {
             <div className="space-y-1">
               {links.filter((link) => link.section === section).map((link) => {
                 const Icon = link.icon;
-                const active = pathname === link.href || (link.href !== "/manager" && link.href !== "/vendor" && pathname.startsWith(`${link.href}/`));
+                const active = pathname === link.href || (link.href !== "/manager" && link.href !== "/vendor" && link.href !== "/client" && pathname.startsWith(`${link.href}/`));
                 return (
                   <Link
                     key={link.href}
