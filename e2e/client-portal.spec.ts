@@ -81,7 +81,8 @@ test("client creates shipment by dropping documents only, then adds more and dow
   const state = await mockApi(page, false);
   await page.goto("/client/new");
   await expect(page.getByRole("textbox")).toHaveCount(0);
-  await page.getByLabel("ISF (required)", { exact: true }).setInputFiles({ name: "isf.txt", mimeType: "text/plain", buffer: Buffer.from("HBL: HBL-CLIENT-100") });
+  await expect(page.locator("input[type=file]")).toHaveCount(1);
+  await page.getByLabel("ISF document", { exact: true }).setInputFiles({ name: "isf.txt", mimeType: "text/plain", buffer: Buffer.from("HBL: HBL-CLIENT-100") });
   await page.screenshot({ path: "qa/client-shipment-review.png", fullPage: true });
   expect(state.counts().creates).toBe(0);
   await page.getByRole("button", { name: "Submit shipment" }).click();
@@ -100,7 +101,7 @@ test("invalid file, failed request, and permission errors are visible", async ({
   await loginState(page);
   await mockApi(page);
   await page.goto("/client/new");
-  await page.getByLabel("ISF (required)", { exact: true }).setInputFiles({ name: "empty.txt", mimeType: "text/plain", buffer: Buffer.from("") });
+  await page.getByLabel("ISF document", { exact: true }).setInputFiles({ name: "empty.txt", mimeType: "text/plain", buffer: Buffer.from("") });
   await expect(page.getByRole("alert").filter({ hasText: "This file" })).toContainText("empty");
   await page.route("https://api.surfgistics.com/shipments", (route) => route.fulfill({ status: 503, json: { detail: "Unavailable" } }));
   await page.goto("/client");
