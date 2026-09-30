@@ -50,7 +50,7 @@ export function statusLabel(shipment: Shipment) {
   return statusLabels[shipment.status] ?? shipment.status.replaceAll("_", " ");
 }
 export function missingDocuments(shipment: Shipment) {
-  return documentTypes.filter(({ type }) => !shipment.documents.some((doc) => doc.document_type === type));
+  return documentTypes.filter(({ type }) => !(type === "isf" && shipment.automation?.isf?.status === "not_requested") && !shipment.documents.some((doc) => doc.document_type === type));
 }
 export function apiError(error: unknown, fallback: string): string {
   if (error && typeof error === "object" && "response" in error) {
@@ -105,7 +105,7 @@ export function workflowStatuses(shipment: Shipment) {
     return { status: waiting, done: false };
   };
   const isf = ["isf_acelynk", "isf_gofreight"].map(state);
-  const isfStep = shipment.isf_processed_at || isf.every((value) => value === "success")
+  const isfStep = state("isf") === "not_requested" ? { status: "Not requested through Surfgistics", done: true } : shipment.isf_processed_at || isf.every((value) => value === "success")
     ? { status: "Complete", done: true }
     : describe(isf.find((value) => value && value !== "success") ?? "queued", "In progress");
   const tally = shipment.automation?.tally_in?.new_documents_require_review ? { status: "Reviewing your new documents", done: false } : describe(state("tally_in"), "Waiting for your invoice and packing list");

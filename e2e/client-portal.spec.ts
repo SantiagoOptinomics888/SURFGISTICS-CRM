@@ -162,3 +162,43 @@ test("administrator can configure a client account with the portal preset", asyn
   await expect(page.getByRole("heading", { name: "New User" })).toHaveCount(0);
   expect(created).toBeTruthy();
 });
+
+for (const missingHbl of [false, true]) {
+  test(`No ISF intake ${missingHbl ? "asks only for missing HBL" : "reads HBL from documents"}`, async ({ page }) => {
+    await loginState(page);
+    await mockApi(page, false);
+    let attempts = 0;
+    const shipment = { ...baseShipment, status: "tally_in_review_required", automation: { isf: { status: "not_requested" } },
+      documents: [
+        { id: 2, document_type: "commercial_invoice", file_name: "invoice.txt", file_size: 20, created_at: baseShipment.created_at },
+        { id: 3, document_type: "packing_list", file_name: "packing.txt", file_size: 20, created_at: baseShipment.created_at },
+      ] };
+    await page.route("https://api.surfgistics.com/shipments/no-isf", async (route) => {
+      attempts++;
+      const body = route.request().postDataBuffer()?.toString() ?? "";
+      expect(body).toContain('name="commercial_invoice"');
+      expect(body).toContain('name="packing_list"');
+      expect(body).not.toContain('name="file"');
+      if (missingHbl && attempts === 1) return route.fulfill({ status: 422, json: { detail: { code: "hbl_required", message: "Enter the shipment HBL to continue." } } });
+      if (missingHbl) expect(body).toContain("HBL-CLIENT-100");
+      return route.fulfill({ status: 201, json: shipment });
+    });
+    await page.route("https://api.surfgistics.com/shipments", (route) => route.fulfill({ json: [shipment] }));
+    await page.goto("/client/new");
+    await page.getByRole("checkbox", { name: /No ISF/ }).check();
+    await expect(page.getByLabel("ISF document", { exact: true })).toHaveCount(0);
+    await expect(page.getByRole("textbox")).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Submit shipment" })).toBeDisabled();
+    await page.getByLabel("Commercial invoice", { exact: true }).setInputFiles({ name: "invoice.txt", mimeType: "text/plain", buffer: Buffer.from("Invoice") });
+    await page.getByLabel("Packing list", { exact: true }).setInputFiles({ name: "packing.txt", mimeType: "text/plain", buffer: Buffer.from("Packing") });
+    await page.getByRole("button", { name: "Submit shipment" }).click();
+    if (missingHbl) {
+      await expect(page.getByRole("textbox")).toHaveCount(1);
+      await page.getByLabel("Shipment HBL").fill("HBL-CLIENT-100");
+      await page.getByRole("button", { name: "Submit shipment" }).click();
+    }
+    await expect(page).toHaveURL(/created=1/);
+    await expect(page.getByText("ISF · Not requested through Surfgistics")).toBeVisible();
+    expect(attempts).toBe(missingHbl ? 2 : 1);
+  });
+}

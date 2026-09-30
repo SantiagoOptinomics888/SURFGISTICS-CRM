@@ -49,7 +49,7 @@ const steps = [
 ];
 
 export function shipmentCurrentStep(shipment: ImportShipment) {
-  if (!shipment.isf_processed_at) return 0;
+  if (!shipment.isf_processed_at && shipment.automation?.isf?.status !== "not_requested") return 0;
   const types = new Set(shipment.documents.map((document) => document.document_type));
   if (!types.has("commercial_invoice") || !types.has("packing_list")) return 1;
   if (!shipment.approved_at) return 2;
@@ -362,7 +362,8 @@ export function ShipmentWorkflowModal({
 
         <main className="min-h-0 overflow-y-auto p-5 sm:p-6">
           {message && <div className="mb-5"><AlertMessage message={message} /></div>}
-          {activeStep === 0 && (
+          {activeStep === 0 && shipment.automation?.isf?.status === "not_requested" && <StepSection title="No ISF" description="Client did not request ISF filing through Surfgistics. Continue with commercial documents."><p className="text-sm text-[#607780]">ISF filing is outside our service scope for this shipment.</p></StepSection>}
+          {activeStep === 0 && shipment.automation?.isf?.status !== "not_requested" && (
             <StepSection title="ISF processing" description="Confirm both cloud automations, then complete the ISF step for this shipment.">
               <DocumentSlot
                 title="ISF document"
